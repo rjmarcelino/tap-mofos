@@ -1,0 +1,24 @@
+{
+  "name": "Rommel John Christian Marcelino",
+  "bio": "Whatever you want, you can have it, as long as you're willing to bleed for it.",
+  "avatar": "images/sampe-mvczm2ep.jpg",
+  "theme": "dark",
+  "links": [
+    {
+      "label": "Add me on Facebook!",
+      "url": "https://www.facebook.com/rjcam031"
+    },
+    {
+      "label": "Hit me up on Instagram!",
+      "url": "https://www.instagram.com/rmmlmrcln/"
+    },
+    {
+      "label": "Watch me stream!",
+      "url": "https://www.tiktok.com/@daxdotes"
+    },
+    {
+      "label": "Save my number!",
+      "url": "tel:09166828617"
+    }
+  ]
+}
