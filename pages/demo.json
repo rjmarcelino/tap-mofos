@@ -1,0 +1,10 @@
+{
+  "name": "Demo Page",
+  "bio": "My first link-in-bio page",
+  "avatar": "",
+  "theme": "dark",
+  "links": [
+    { "label": "My Website", "url": "https://example.com" },
+    { "label": "Instagram", "url": "https://instagram.com" }
+  ]
+}
