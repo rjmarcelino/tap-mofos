@@ -22,8 +22,8 @@ function render(p) {
 <meta property="og:title" content="${esc(p.name)}">
 <meta property="og:description" content="${esc(p.bio)}">
 <style>
-body{margin:0;min-height:100vh;background:${t.bg};color:${t.fg};font-family:system-ui,sans-serif;display:flex;justify-content:center}
-main{width:100%;max-width:460px;padding:48px 20px;text-align:center}
+body{margin:0;min-height:100vh;min-height:100dvh;background:${t.bg};color:${t.fg};font-family:system-ui,sans-serif;display:flex;justify-content:center;overflow-wrap:anywhere}
+main{width:100%;max-width:460px;padding:48px 20px;padding-left:max(20px,env(safe-area-inset-left));padding-right:max(20px,env(safe-area-inset-right));text-align:center}
 img{width:96px;height:96px;border-radius:50%;object-fit:cover}
 h1{margin:12px 0 4px;font-size:1.4rem}
 p{opacity:.8;margin:0 0 28px}
