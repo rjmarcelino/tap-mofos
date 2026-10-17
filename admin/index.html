@@ -13,6 +13,9 @@ label{display:block;margin-top:16px;font-weight:600}
 .top button{width:auto;margin:0;padding:4px 12px;font-size:14px}
 #prev{display:none;width:60%;max-width:260px;aspect-ratio:5/6;margin:8px 0;background:center/cover #ccc;
   -webkit-mask-image:linear-gradient(to bottom,#000 55%,transparent 100%);mask-image:linear-gradient(to bottom,#000 55%,transparent 100%)}
+.lh{display:flex;align-items:center;gap:8px}
+.ico{display:flex}
+.ico svg{width:22px;height:22px;display:block}
 small{color:#666}
 </style></head>
 <body>
@@ -46,6 +49,38 @@ const $ = id => document.getElementById(id);
   $(k).addEventListener('change', () => localStorage.setItem('lib_' + k, $(k).value.trim()));
 });
 
+const ICONS = {
+  instagram: '<rect x="3" y="3" width="18" height="18" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.3" cy="6.7" r="1.2" fill="currentColor"/>',
+  facebook: '<path fill="currentColor" d="M13.5 21v-7.5h2.6l.4-3h-3V8.7c0-.9.3-1.5 1.5-1.5h1.6V4.5c-.3 0-1.2-.1-2.3-.1-2.3 0-3.8 1.4-3.8 3.9v2.2H8v3h2.5V21z"/>',
+  tiktok: '<path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5M14 3c.3 2.6 2 4.4 5 4.6"/>',
+  youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="4" fill="none" stroke="currentColor" stroke-width="2"/><path fill="currentColor" d="M10 9.2v5.6l5-2.8z"/>',
+  x: '<path d="M4 4l16 16M20 4L4 20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>',
+  linkedin: '<rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V16M8 7.8v.1M12 16v-5.5M12 13c0-1.6 1-2.5 2.2-2.5S16 11.4 16 13v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
+  spotify: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7.5 9.5c3-1 6.5-.7 9 .8M8 12.6c2.5-.7 5-.5 7.4.8M8.6 15.5c2-.5 4-.3 5.8.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
+  telegram: '<path d="M21 4 3 11l6 2.2L11 20l3-4.5 5 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  email: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7l9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/>'
+};
+const HOSTS = [
+  [/(^|\.)instagram\.com$/, 'instagram'],
+  [/(^|\.)(facebook|fb)\.com$|^fb\.me$/, 'facebook'],
+  [/(^|\.)tiktok\.com$/, 'tiktok'],
+  [/(^|\.)youtube\.com$|^youtu\.be$/, 'youtube'],
+  [/(^|\.)(x|twitter)\.com$/, 'x'],
+  [/(^|\.)linkedin\.com$/, 'linkedin'],
+  [/(^|\.)spotify\.com$/, 'spotify'],
+  [/^t\.me$|(^|\.)telegram\.org$/, 'telegram']
+];
+function iconFor(url) {
+  const u = String(url || '').trim();
+  if (/^mailto:/i.test(u)) return 'email';
+  try {
+    const h = new URL(/^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u).hostname.toLowerCase();
+    const m = HOSTS.find(([re]) => re.test(h));
+    return m ? m[1] : '';
+  } catch (e) { return ''; }
+}
+const svg = name => ICONS[name] ? `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>` : '';
+
 // ---- link rows ----
 const list = $('links');
 function renumber() {
@@ -54,9 +89,11 @@ function renumber() {
 function addRow() {
   const d = document.createElement('div');
   d.className = 'row';
-  d.innerHTML = `<div class="top"><b class="n"></b><button type="button" class="rm">Remove</button></div>
+  d.innerHTML = `<div class="top"><span class="lh"><i class="ico"></i><b class="n"></b></span><button type="button" class="rm">Remove</button></div>
     <input class="lbl" placeholder="Button text (e.g. Instagram)">
     <input class="url" type="url" inputmode="url" placeholder="URL (e.g. https://instagram.com/yourname)">`;
+  const ico = d.querySelector('.ico'), urlBox = d.querySelector('.url');
+  urlBox.oninput = () => { ico.innerHTML = svg(iconFor(urlBox.value)); };
   d.querySelector('.rm').onclick = () => { d.remove(); renumber(); };
   list.appendChild(d);
   renumber();
