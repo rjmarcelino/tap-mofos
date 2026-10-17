@@ -1,0 +1,23 @@
+{
+  "name": "Aron Dexter Valdez",
+  "title": "Licensed Financial Advisor",
+  "company": "Sunlife",
+  "bio": "Need mo 'to, alam mo kung baket? Tanga ka kase.",
+  "avatar": "images/aron-mvd0o95q.jpg",
+  "theme": "dark",
+  "site": "https://rjmarcelino.github.io/tap-mofos",
+  "links": [
+    {
+      "label": "Add me on FB!",
+      "url": "https://www.facebook.com/arondexter.valdez"
+    },
+    {
+      "label": "Hit me up on Insta!",
+      "url": "https://www.instagram.com/Odlabaldo"
+    },
+    {
+      "label": "12345678911",
+      "url": "tel:12345678911"
+    }
+  ]
+}
