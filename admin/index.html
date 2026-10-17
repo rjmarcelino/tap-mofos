@@ -38,6 +38,7 @@ small{color:#666}
 <label>Links</label>
 <div id="links"></div>
 <button id="add" type="button">+ Add link</button>
+<button id="addphone" type="button">+ Add phone number</button>
 
 <button id="save" type="button">Save page</button>
 <p id="msg"></p>
@@ -58,6 +59,7 @@ const ICONS = {
   linkedin: '<rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V16M8 7.8v.1M12 16v-5.5M12 13c0-1.6 1-2.5 2.2-2.5S16 11.4 16 13v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   spotify: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7.5 9.5c3-1 6.5-.7 9 .8M8 12.6c2.5-.7 5-.5 7.4.8M8.6 15.5c2-.5 4-.3 5.8.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   telegram: '<path d="M21 4 3 11l6 2.2L11 20l3-4.5 5 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   email: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7l9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/>'
 };
 const HOSTS = [
@@ -73,6 +75,7 @@ const HOSTS = [
 function iconFor(url) {
   const u = String(url || '').trim();
   if (/^mailto:/i.test(u)) return 'email';
+  if (/^tel:/i.test(u)) return 'phone';
   try {
     const h = new URL(/^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u).hostname.toLowerCase();
     const m = HOSTS.find(([re]) => re.test(h));
@@ -84,23 +87,29 @@ const svg = name => ICONS[name] ? `<svg viewBox="0 0 24 24" aria-hidden="true">$
 // ---- link rows ----
 const list = $('links');
 function renumber() {
-  [...list.children].forEach((r, i) => r.querySelector('.n').textContent = 'Link ' + (i + 1));
+  [...list.children].forEach((r, i) => r.querySelector('.n').textContent = (r.dataset.type === 'phone' ? 'Phone ' : 'Link ') + (i + 1));
 }
-function addRow() {
+function addRow(type) {
   const d = document.createElement('div');
   d.className = 'row';
+  d.dataset.type = type === 'phone' ? 'phone' : 'link';
   d.innerHTML = `<div class="top"><span class="lh"><i class="ico"></i><b class="n"></b></span><button type="button" class="rm">Remove</button></div>
     <input class="lbl" placeholder="Button text (e.g. Instagram)">
-    <input class="url" type="url" inputmode="url" placeholder="URL (e.g. https://instagram.com/yourname)">`;
+    ${type === 'phone'
+      ? '<input class="url" type="tel" inputmode="tel" placeholder="Phone number (e.g. +63 912 345 6789)">'
+      : '<input class="url" type="url" inputmode="url" placeholder="URL (e.g. https://instagram.com/yourname)">'}`;
   const ico = d.querySelector('.ico'), urlBox = d.querySelector('.url');
-  urlBox.oninput = () => { ico.innerHTML = svg(iconFor(urlBox.value)); };
+  urlBox.oninput = () => { ico.innerHTML = d.dataset.type === 'phone' ? svg('phone') : svg(iconFor(urlBox.value)); };
+  urlBox.oninput();
   d.querySelector('.rm').onclick = () => { d.remove(); renumber(); };
   list.appendChild(d);
   renumber();
 }
-$('add').onclick = addRow;
+$('add').onclick = () => addRow();
+$('addphone').onclick = () => addRow('phone');
 addRow();
 
+const telUrl = v => { const n = v.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, ''); return n.replace(/\D/g, '').length >= 5 ? 'tel:' + n : ''; };
 const fixUrl = u => !u ? '' : /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u;
 
 // ---- photo ----
@@ -138,7 +147,7 @@ $('save').onclick = async () => {
 
   const links = [...list.children].map(r => ({
     label: r.querySelector('.lbl').value.trim(),
-    url: fixUrl(r.querySelector('.url').value.trim())
+    url: r.dataset.type === 'phone' ? telUrl(r.querySelector('.url').value) : fixUrl(r.querySelector('.url').value.trim())
   })).filter(l => l.label && l.url);
 
   const api = p => `https://api.github.com/repos/${owner}/${repo}/contents/${p}`;
