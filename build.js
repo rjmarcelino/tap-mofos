@@ -16,6 +16,7 @@ const ICONS = {
   linkedin: '<rect x="3" y="3" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 10.5V16M8 7.8v.1M12 16v-5.5M12 13c0-1.6 1-2.5 2.2-2.5S16 11.4 16 13v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   spotify: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M7.5 9.5c3-1 6.5-.7 9 .8M8 12.6c2.5-.7 5-.5 7.4.8M8.6 15.5c2-.5 4-.3 5.8.7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   telegram: '<path d="M21 4 3 11l6 2.2L11 20l3-4.5 5 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   email: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7l9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/>'
 };
 const HOSTS = [
@@ -31,6 +32,7 @@ const HOSTS = [
 function iconFor(url) {
   const u = String(url || '').trim();
   if (/^mailto:/i.test(u)) return 'email';
+  if (/^tel:/i.test(u)) return 'phone';
   try {
     const h = new URL(/^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u).hostname.toLowerCase();
     const m = HOSTS.find(([re]) => re.test(h));
@@ -50,7 +52,7 @@ function render(p) {
   const hero = p.avatar
     ? `<div class="hero"><img src="${esc(imgUrl(p.avatar))}" alt=""></div>` : '';
   const links = (p.links || []).map(l =>
-    `<a href="${esc(safeUrl(l.url))}" target="_blank" rel="noopener">${svg(iconFor(l.url))}${esc(l.label)}</a>`
+    `<a href="${esc(safeUrl(l.url))}"${/^https?:/i.test(l.url) ? ' target="_blank" rel="noopener"' : ''}>${svg(iconFor(l.url))}${esc(l.label)}</a>`
   ).join('');
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
