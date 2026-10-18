@@ -2,30 +2,46 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Link-in-bio builder</title>
+<script>try{var t=localStorage.getItem('lib_theme');if(!t&&matchMedia('(prefers-color-scheme: dark)').matches)t='dark';document.documentElement.dataset.theme=t||'light'}catch(e){}</script>
 <style>
 *{box-sizing:border-box}
-body{font-family:system-ui,sans-serif;margin:0;padding:16px 16px 60px}
-input,textarea,select,button{width:100%;padding:10px;margin:6px 0;font:inherit;font-size:16px}
-button{cursor:pointer}
+:root{--bg:#fff;--fg:#111;--muted:#666;--line:#bbb;--line2:#ddd;--card:#f1f1f1;--okbg:#eafaf1;--ph:#ccc;
+  --input:#fff;--btn:#efefef;--link:#0b5fd6;--frame:#222;color-scheme:light}
+[data-theme=dark]{--bg:#14171a;--fg:#e8eaed;--muted:#9aa0a6;--line:#3b4148;--line2:#2c3238;--card:#1d2126;--okbg:#10291c;--ph:#2c3238;
+  --input:#1b1f23;--btn:#2a3037;--link:#7db4ff;--frame:#050607;color-scheme:dark}
+body{font-family:system-ui,sans-serif;margin:0;padding:16px 16px 60px;background:var(--bg);color:var(--fg)}
+a{color:var(--link)}
+input,textarea,select,button{width:100%;padding:10px;margin:6px 0;font:inherit;font-size:16px;background:var(--input);color:var(--fg);border:1px solid var(--line);border-radius:6px}
+button{cursor:pointer;background:var(--btn)}
 label{display:block;margin-top:16px;font-weight:600}
-small{color:#666}
+small{color:var(--muted)}
 [hidden]{display:none!important}
 
 /* top bar + tabs */
-.bar{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid #bbb;margin-bottom:20px}
+.bar{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--line);margin-bottom:20px}
 .bar h2{margin:0 0 8px}
 .tabs{display:flex;gap:4px}
-.tabs button{width:auto;margin:0 0 -1px;padding:8px 22px;font-size:15px;border:1px solid #bbb;border-bottom:none;border-radius:8px 8px 0 0;background:#f1f1f1}
-.tabs button.on{background:#fff;font-weight:700;border-bottom:1px solid #fff}
+.tabs button{width:auto;margin:0 0 -1px;padding:8px 22px;font-size:15px;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;background:var(--card)}
+.tabs button.on{background:var(--bg);font-weight:700;border-bottom:1px solid var(--bg)}
 
 /* layout (mobile: stacked) */
 .layout > aside{margin-bottom:20px}
 #pvbox{margin-top:28px}
-#pv{display:block;width:100%;max-width:520px;height:min(900px,calc(100vh - 96px));min-height:520px;margin:8px auto 0;border:8px solid #222;border-radius:30px;background:#fff}
+#pv{display:block;width:100%;max-width:520px;height:min(900px,calc(100vh - 96px));min-height:520px;margin:8px auto 0;border:8px solid var(--frame);border-radius:30px;background:#fff}
 #settings{max-width:520px}
 
+/* dark mode switch */
+.bar-r{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap}
+.sw{display:flex;align-items:center;gap:8px;margin:0 0 8px;cursor:pointer;font-weight:600;font-size:14px}
+.sw input{position:absolute;opacity:0;width:0;height:0;margin:0;padding:0}
+.sw .track{width:40px;height:22px;border-radius:11px;background:var(--line);position:relative;transition:background .2s}
+.sw .track::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s}
+.sw input:checked + .track{background:#2b7}
+.sw input:checked + .track::after{transform:translateX(18px)}
+.sw input:focus-visible + .track{outline:2px solid #2b7;outline-offset:2px}
+
 /* link rows */
-.row{border:1px solid #bbb;border-radius:8px;padding:6px 10px 10px;margin:10px 0}
+.row{border:1px solid var(--line);border-radius:8px;padding:6px 10px 10px;margin:10px 0}
 .top{display:flex;justify-content:space-between;align-items:center}
 .top button{width:auto;margin:0;padding:4px 12px;font-size:14px}
 .lh{display:flex;align-items:center;gap:8px}
@@ -33,20 +49,20 @@ small{color:#666}
 .ico svg{width:22px;height:22px;display:block}
 
 /* dashboard */
-.stat{display:flex;align-items:baseline;gap:10px;padding:14px;border:1px solid #bbb;border-radius:10px}
+.stat{display:flex;align-items:baseline;gap:10px;padding:14px;border:1px solid var(--line);border-radius:10px}
 .stat b{font-size:40px;line-height:1}
-.stat span{flex:1;color:#444}
+.stat span{flex:1;color:var(--muted)}
 .stat button,.pc button{width:auto;margin:0;padding:6px 10px;font-size:14px}
-.pc{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px solid #ddd;border-radius:10px;padding:8px 10px;margin:8px 0}
-.av{width:44px;height:44px;border-radius:50%;object-fit:cover;background:#ccc;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.pc{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px solid var(--line2);border-radius:10px;padding:8px 10px;margin:8px 0}
+.av{width:44px;height:44px;border-radius:50%;object-fit:cover;background:var(--ph);display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
 .pi{flex:1;min-width:0;display:flex;flex-direction:column}
 .pi a,.pi small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .btns{display:flex;gap:6px;flex-basis:100%}
 
 /* edit bar + photo adjuster */
-.editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin:8px 0;border:1px solid #2b7;border-radius:8px;background:#eafaf1}
+.editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin:8px 0;border:1px solid #2b7;border-radius:8px;background:var(--okbg)}
 .editbar button{width:auto;margin:0;padding:4px 12px;font-size:14px}
-#frame{position:relative;width:60%;max-width:260px;aspect-ratio:5/6;margin:8px 0;overflow:hidden;background:#ccc;cursor:crosshair;touch-action:none}
+#frame{position:relative;width:60%;max-width:260px;aspect-ratio:5/6;margin:8px 0;overflow:hidden;background:var(--ph);cursor:crosshair;touch-action:none}
 #adjimg{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 #box{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none}
 
@@ -64,10 +80,13 @@ small{color:#666}
 <body>
 <div class="bar">
   <h2>Link-in-bio builder</h2>
+  <div class="bar-r">
+  <label class="sw"><input type="checkbox" id="dark"><span class="track"></span><span>Dark mode</span></label>
   <nav class="tabs">
     <button id="tab-editor" type="button" class="on">Editor</button>
     <button id="tab-settings" type="button">Settings</button>
   </nav>
+  </div>
 </div>
 
 <div class="layout">
@@ -141,6 +160,14 @@ const $ = id => document.getElementById(id);
   $(k).value = localStorage.getItem('lib_' + k) || '';
   $(k).addEventListener('change', () => localStorage.setItem('lib_' + k, $(k).value.trim()));
 });
+
+// ---- dark mode ----
+$('dark').checked = document.documentElement.dataset.theme === 'dark';
+$('dark').onchange = () => {
+  const d = $('dark').checked;
+  document.documentElement.dataset.theme = d ? 'dark' : 'light';
+  try { localStorage.setItem('lib_theme', d ? 'dark' : 'light'); } catch (e) {}
+};
 
 // ---- tabs + settings ----
 function showTab(name) {
