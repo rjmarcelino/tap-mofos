@@ -67,11 +67,16 @@
   function render(p, opts) {
     opts = opts || {};
     const t = themes[p.theme] || themes.dark;
-    const hero = p.avatar ? `<div class="hero"><img src="${esc(imgUrl(p.avatar))}" alt=""></div>` : '';
+    const num = (v, d) => (v == null || v === '' || isNaN(Number(v))) ? d : Number(v);
+    const z = Math.min(3, Math.max(1, num(p.photoZoom, 1)));
+    const fx = Math.min(100, Math.max(0, num(p.photoX, 50)));
+    const fy = Math.min(100, Math.max(0, num(p.photoY, 50)));
+    const imgStyle = z !== 1 ? ` style="transform:scale(${z});transform-origin:${fx}% ${fy}%"` : '';
+    const hero = p.avatar ? `<div class="hero"><img src="${esc(imgUrl(p.avatar))}" alt=""${imgStyle}></div>` : '';
     const roleTxt = [p.title, p.company].filter(Boolean).join(' · ');
     const role = roleTxt ? `<div class="role">${esc(roleTxt)}</div>` : '';
     const save = hasContact(p)
-      ? `<a class="save" href="contact.vcf">${svg('contact')}Save contact</a>` : '';
+      ? `<a class="save b" style="--i:0" href="contact.vcf">${svg('contact')}Save contact</a>` : '';
     // iOS Safari ignores the download attribute and needs a text/vcard blob to offer "Add to Contacts"
     const saveJs = hasContact(p) ? '<script>(function(){var VCF=' + JSON.stringify(vcard(p)).replace(/</g, '\\u003c') + ';'
       + 'var b=document.querySelector("a.save");if(!b)return;'
@@ -81,8 +86,8 @@
       + 'if(ios){window.location.href=u;return;}'
       + 'var a=document.createElement("a");a.href=u;a.download="contact.vcf";document.body.appendChild(a);a.click();a.remove();});'
       + '})();<\/script>' : '';
-    const links = (p.links || []).map(l =>
-      `<a href="${esc(safeUrl(l.url))}"${/^https?:/i.test(l.url) ? ' target="_blank" rel="noopener"' : ''}>${svg(iconFor(l.url))}${esc(l.label)}</a>`
+    const links = (p.links || []).map((l, i) =>
+      `<a class="b" style="--i:${i + (hasContact(p) ? 1 : 0)}" href="${esc(safeUrl(l.url))}"${/^https?:/i.test(l.url) ? ' target="_blank" rel="noopener"' : ''}>${svg(iconFor(l.url))}${esc(l.label)}</a>`
     ).join('');
     const site = String(p.site || '').replace(/\/+$/, '');
     const ogImg = site && p.avatar && !/^(data:|blob:)/i.test(p.avatar)
@@ -91,9 +96,12 @@
     const og = `<meta property="og:type" content="profile">`
       + (site && opts.slug ? `<meta property="og:url" content="${esc(site)}/p/${esc(opts.slug)}/">` : '')
       + (ogImg ? `<meta property="og:image" content="${esc(ogImg)}"><meta name="twitter:card" content="summary_large_image">` : '');
+    const jsOn = opts.preview ? '' : '<script>document.documentElement.classList.add("js")<\/script>';
+    const goJs = opts.preview ? '' : '<script>(function(){var d=document.documentElement,done=false;function go(){if(done)return;done=true;requestAnimationFrame(function(){d.classList.add("go")})}'
+      + 'if(document.readyState==="complete")go();else{addEventListener("load",go);setTimeout(go,3000)}})();<\/script>';
     return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>${title}</title>
+${jsOn}<title>${title}</title>
 <meta property="og:title" content="${title}">
 <meta property="og:description" content="${esc([roleTxt, p.bio].filter(Boolean).join(' — '))}">
 ${og}
@@ -102,7 +110,7 @@ ${og}
 body{margin:0;min-height:100vh;min-height:100dvh;background:${t.bg};color:${t.fg};font-family:system-ui,sans-serif;display:flex;justify-content:center;overflow-wrap:anywhere}
 main{width:100%;max-width:460px;padding:0 20px 48px;text-align:center}
 main.nophoto{padding-top:48px}
-.hero{margin:0 -20px;aspect-ratio:5/6;-webkit-mask-image:linear-gradient(to bottom,#000 55%,transparent 100%);mask-image:linear-gradient(to bottom,#000 55%,transparent 100%)}
+.hero{margin:0 -20px;aspect-ratio:5/6;overflow:hidden;-webkit-mask-image:linear-gradient(to bottom,#000 55%,transparent 100%);mask-image:linear-gradient(to bottom,#000 55%,transparent 100%)}
 .hero img{width:100%;height:100%;object-fit:cover;display:block}
 .info{position:relative;margin-top:-90px;margin-bottom:28px}
 main.nophoto .info{margin-top:0}
@@ -113,11 +121,16 @@ a{position:relative;display:block;padding:14px 48px;margin:10px 0;border-radius:
 a.save{background:${t.accent};color:${t.bg};border-color:transparent}
 a svg{position:absolute;left:16px;top:50%;width:22px;height:22px;margin-top:-11px}
 a:hover{transform:scale(1.02)}
+a.b{transition:transform .15s}
+@keyframes slidein{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}
+.js:not(.go) a.b{opacity:0}
+.go a.b{animation:slidein .55s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--i)*120ms)}
+@media (prefers-reduced-motion:reduce){.js:not(.go) a.b{opacity:1}.go a.b{animation:none}}
 </style></head><body><main class="${p.avatar ? '' : 'nophoto'}">
 ${hero}
 <div class="info"><h1>${esc(p.name)}</h1>${role}<p>${esc(p.bio)}</p></div>
 ${save}${links}
-</main>${saveJs}</body></html>`;
+</main>${saveJs}${goJs}</body></html>`;
   }
 
   const api = { render, vcard, hasContact, iconFor, svg };
