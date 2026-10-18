@@ -66,6 +66,21 @@ small{color:var(--muted)}
 #adjimg{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 #box{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none}
 
+/* design controls, reorder grip, toasts */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chk{display:flex;align-items:center;gap:8px;font-weight:400;margin-top:10px}
+.chk input{width:auto;margin:0}
+input[type=color]{width:64px;height:40px;padding:2px}
+.accentrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:6px}
+.tpl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.tpl select{flex:1;min-width:140px;width:auto}
+.tpl button{width:auto;margin:6px 0;padding:8px 12px;font-size:14px}
+.grip{cursor:grab;user-select:none;opacity:.6;font-size:18px}
+.rb{display:flex;gap:4px}
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:50}
+.toast{background:#222;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:340px;font-size:14px;transition:opacity .4s}
+.toast.ok{background:#1a7f4b}.toast.err{background:#b3261e}.toast.out{opacity:0}
+
 /* desktop: dashboard | editor | preview */
 @media(min-width:960px){
   body{padding:20px 28px 60px}
@@ -78,6 +93,7 @@ small{color:var(--muted)}
 }
 </style></head>
 <body>
+<div id="toasts"></div>
 <div class="bar">
   <h2>Link-in-bio builder</h2>
   <div class="bar-r">
@@ -99,6 +115,7 @@ small{color:var(--muted)}
   <main>
     <section id="p-editor" class="editor">
       <div>
+        <div id="draftbar" class="editbar" hidden><span>You have an unsaved draft.</span><span><button id="draftrestore" type="button">Restore</button> <button id="draftdiscard" type="button">Discard</button></span></div>
         <div id="editbar" class="editbar" hidden><span>Editing <b id="editname"></b></span><button id="newpage" type="button">New page</button></div>
         <input id="slug" placeholder="Slug (e.g. jane) - becomes the link">
         <input id="name" placeholder="Display name">
@@ -106,6 +123,17 @@ small{color:var(--muted)}
         <input id="company" placeholder="Company (optional)">
         <input id="bio" placeholder="Bio">
         <select id="theme"><option>dark</option><option>light</option><option>ocean</option></select>
+
+        <label>Design</label>
+        <div class="grid2">
+          <div><small>Font</small>
+            <select id="font"><option value="modern">Modern</option><option value="serif">Elegant serif</option><option value="display">Bold display</option><option value="rounded">Rounded</option><option value="mono">Mono</option></select></div>
+          <div><small>Buttons</small>
+            <select id="btnstyle"><option value="solid">Solid</option><option value="outline">Outline</option><option value="glass">Glass</option><option value="soft">Soft shadow</option></select></div>
+        </div>
+        <div class="accentrow"><input id="accent" type="color" value="#0a84ff"><label class="chk" style="margin:0"><input type="checkbox" id="useaccent"> Use a custom accent color</label></div>
+        <label class="chk"><input type="checkbox" id="tilt"> Photo tilt effect (follows phone or mouse movement)</label>
+        <div class="tpl"><select id="tplsel"><option value="">Templates…</option></select><button id="tplsave" type="button">Save design as template</button><button id="tpldel" type="button">Delete</button></div>
 
         <label for="photo">Profile photo</label>
         <input id="photo" type="file" accept="image/*">
@@ -117,6 +145,10 @@ small{color:var(--muted)}
           <small>Drag on the photo to choose the area to focus on, and use the slider to zoom. The white box shows what stays visible. The live preview shows the result.</small>
           <button id="resetpos" type="button">Reset position</button>
         </div>
+
+        <label for="logo">Company logo (optional)</label>
+        <input id="logo" type="file" accept="image/*">
+        <small>Shown small above the name. A transparent PNG works best.</small>
 
         <label>Links</label>
         <div id="links"></div>
@@ -215,15 +247,17 @@ function getLinks() {
     url: r.dataset.type === 'phone' ? telUrl(r.querySelector('.url').value) : fixUrl(r.querySelector('.url').value.trim())
   })).filter(l => l.label && l.url);
 }
-const collect = avatar => ({
+const collect = (avatar, logo) => ({
   name: $('name').value, title: $('title').value.trim(), company: $('company').value.trim(), bio: $('bio').value,
-  avatar, photoZoom: +$('zoom').value, photoX: Math.round(pos.x), photoY: Math.round(pos.y), theme: $('theme').value, site: siteBase(), links: getLinks()
+  avatar, photoZoom: +$('zoom').value, photoX: Math.round(pos.x), photoY: Math.round(pos.y), logo, accent: $('useaccent').checked ? $('accent').value : '', font: $('font').value, btnStyle: $('btnstyle').value, tilt: $('tilt').checked,
+  theme: $('theme').value, site: siteBase(), links: getLinks()
 });
 let photo = null, photoUrl = '', timer, existingAvatar = '', editingSlug = '', pos = { x: 50, y: 50 };
+let logoFile = null, logoUrl = '', existingLogo = '', dirty = false, dragRow = null;
 function preview() {
   clearTimeout(timer);
   timer = setTimeout(() => {
-    if (window.Cards) $('pv').srcdoc = Cards.render(collect(curPhoto()), { slug: slugOf(), preview: true });
+    if (window.Cards) $('pv').srcdoc = Cards.render(collect(curPhoto(), curLogo()), { slug: slugOf(), preview: true });
   }, 150);
 }
 document.addEventListener('input', preview);
@@ -243,11 +277,11 @@ function pageCard(p) {
   const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Copy link';
   b.onclick = async () => {
     const u = (siteBase() || new URL('..', location.href).href.replace(/\/$/, '')) + '/p/' + p.slug + '/';
-    try { await navigator.clipboard.writeText(u); b.textContent = 'Copied!'; } catch (e) { b.textContent = 'Copy failed'; }
+    try { await navigator.clipboard.writeText(u); b.textContent = 'Copied!'; toast('Link copied', 'ok'); } catch (e) { b.textContent = 'Copy failed'; }
     setTimeout(() => b.textContent = 'Copy link', 1500);
   };
   const q = document.createElement('button'); q.type = 'button'; q.textContent = 'QR';
-  q.onclick = () => downloadQr(p.slug);
+  q.onclick = () => downloadQr(p.slug, p.accent, absUrl(p.logo || p.avatar), !!p.logo);
   const btns = document.createElement('div'); btns.className = 'btns'; const ed = document.createElement('button'); ed.type = 'button'; ed.textContent = 'Edit'; ed.onclick = () => loadPage(p.slug);
   btns.append(ed, b, q);
   d.append(av, info, btns);
@@ -270,24 +304,39 @@ $('refresh').onclick = loadStats;
 loadStats();
 
 // ---- QR code ----
-function qrPng(text) {
-  const qr = qrcode(0, 'M'); qr.addData(text); qr.make();
-  const n = qr.getModuleCount(), s = 10, m = 4, size = (n + m * 2) * s;
+const lum = h => { const n = parseInt(h.slice(1), 16); return (0.2126 * (n >> 16) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255)) / 255; };
+const qrInk = a => (/^#[0-9a-f]{6}$/i.test(a || '') && lum(a) < 0.55) ? a : '#111111';
+const absUrl = p => !p ? '' : /^(https?:|blob:|data:)/i.test(p) ? p : new URL('../' + p, location.href).href;
+function loadImg(src) { return new Promise(ok => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => ok(i); i.onerror = () => ok(null); i.src = src; }); }
+async function qrPng(text, ink, center, contain) {
+  const qr = qrcode(0, 'H'); qr.addData(text); qr.make();
+  const n = qr.getModuleCount(), s = 12, m = 4, size = (n + m * 2) * s;
   const c = document.createElement('canvas'); c.width = c.height = size;
-  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, size, size); x.fillStyle = '#000';
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, size, size); x.fillStyle = ink;
   for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (qr.isDark(r, k)) x.fillRect((k + m) * s, (r + m) * s, s, s);
+  const img = center ? await loadImg(center) : null;
+  if (img) {
+    const d = size * 0.2, mid = size / 2;
+    x.fillStyle = '#fff'; x.beginPath(); x.arc(mid, mid, d / 2 + 10, 0, Math.PI * 2); x.fill();
+    x.save(); x.beginPath(); x.arc(mid, mid, d / 2, 0, Math.PI * 2); x.clip();
+    const k = (contain ? Math.min : Math.max)(d / img.width, d / img.height);
+    x.drawImage(img, mid - img.width * k / 2, mid - img.height * k / 2, img.width * k, img.height * k);
+    x.restore();
+  }
   return c.toDataURL('image/png');
 }
-function downloadQr(slug) {
+async function downloadQr(slug, accent, center, contain) {
   if (typeof qrcode === 'undefined') { alert('The QR library could not load. Check your internet connection.'); return; }
   const base = siteBase();
   if (!base || !slug) { alert('Enter a slug and a site address (or username and repo) first.'); return; }
-  const a = document.createElement('a');
-  a.href = qrPng(`${base}/p/${slug}/`);
-  a.download = `qr-${slug}.png`;
-  a.click();
+  try {
+    const a = document.createElement('a');
+    a.href = await qrPng(`${base}/p/${slug}/`, qrInk(accent), center, contain);
+    a.download = `qr-${slug}.png`; a.click();
+    toast('QR code downloaded', 'ok');
+  } catch (e) { toast('Could not make the QR code', 'err'); }
 }
-$('qr').onclick = () => downloadQr(slugOf());
+$('qr').onclick = () => downloadQr(slugOf(), $('useaccent').checked ? $('accent').value : '', absUrl(curLogo() || curPhoto()), !!curLogo());
 
 // ---- link rows ----
 function renumber() {
@@ -297,7 +346,7 @@ function addRow(type) {
   const d = document.createElement('div');
   d.className = 'row';
   d.dataset.type = type === 'phone' ? 'phone' : 'link';
-  d.innerHTML = `<div class="top"><span class="lh"><i class="ico"></i><b class="n"></b></span><button type="button" class="rm">Remove</button></div>
+  d.innerHTML = `<div class="top"><span class="lh"><span class="grip" title="Drag to reorder">⠿</span><i class="ico"></i><b class="n"></b></span><span class="rb"><button type="button" class="up" title="Move up">↑</button><button type="button" class="dn" title="Move down">↓</button><button type="button" class="rm">Remove</button></span></div>
     <input class="lbl" placeholder="Button text (e.g. Instagram)">
     ${type === 'phone'
       ? '<input class="url" type="tel" inputmode="tel" placeholder="Phone number (e.g. +63 912 345 6789)">'
@@ -305,7 +354,14 @@ function addRow(type) {
   const ico = d.querySelector('.ico'), urlBox = d.querySelector('.url');
   urlBox.oninput = () => { ico.innerHTML = window.Cards ? (d.dataset.type === 'phone' ? Cards.svg('phone') : Cards.svg(Cards.iconFor(urlBox.value))) : ''; };
   urlBox.oninput();
-  d.querySelector('.rm').onclick = () => { d.remove(); renumber(); preview(); };
+  d.querySelector('.rm').onclick = () => { d.remove(); renumber(); preview(); markDirty(); };
+  d.querySelector('.up').onclick = () => { if (d.previousElementSibling) { list.insertBefore(d, d.previousElementSibling); renumber(); preview(); markDirty(); } };
+  d.querySelector('.dn').onclick = () => { if (d.nextElementSibling) { list.insertBefore(d.nextElementSibling, d); renumber(); preview(); markDirty(); } };
+  d.querySelector('.grip').onmousedown = () => { d.draggable = true; };
+  d.onmouseup = () => { d.draggable = false; };
+  d.ondragstart = e => { dragRow = d; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', ''); d.style.opacity = .5; };
+  d.ondragend = () => { d.draggable = false; d.style.opacity = ''; dragRow = null; renumber(); preview(); markDirty(); };
+  d.ondragover = e => { if (!dragRow || dragRow === d) return; e.preventDefault(); const r = d.getBoundingClientRect(); list.insertBefore(dragRow, e.clientY < r.top + r.height / 2 ? d : d.nextSibling); };
   list.appendChild(d);
   renumber();
   preview();
@@ -321,6 +377,11 @@ function curPhoto() {
   if (photoUrl) return photoUrl;
   if (!existingAvatar) return '';
   return /^https?:/i.test(existingAvatar) ? existingAvatar : new URL('../' + existingAvatar, location.href).href;
+}
+function curLogo() {
+  if (logoUrl) return logoUrl;
+  if (!existingLogo) return '';
+  return /^https?:/i.test(existingLogo) ? existingLogo : new URL('../' + existingLogo, location.href).href;
 }
 function drawBox() {
   const z = +$('zoom').value, b = $('box').style;
@@ -351,9 +412,31 @@ function updateBar() {
 }
 function newPage() {
   editingSlug = ''; existingAvatar = ''; photo = null; photoUrl = ''; $('photo').value = '';
+  existingLogo = ''; logoFile = null; logoUrl = ''; $('logo').value = ''; dirty = false;
+  $('font').value = 'modern'; $('btnstyle').value = 'solid'; $('useaccent').checked = false; $('tilt').checked = false;
   ['slug', 'name', 'title', 'company', 'bio'].forEach(k => $(k).value = '');
   $('theme').value = 'dark'; pos = { x: 50, y: 50 }; $('zoom').value = 1;
   list.replaceChildren(); addRow(); updateBar(); refreshAdjuster();
+}
+function fillForm(j, slug, asEdit) {
+  newPage();
+  $('slug').value = slug || ''; $('name').value = j.name || ''; $('title').value = j.title || ''; $('company').value = j.company || '';
+  $('bio').value = j.bio || ''; $('theme').value = j.theme || 'dark';
+  $('font').value = j.font || 'modern'; $('btnstyle').value = j.btnStyle || 'solid';
+  $('useaccent').checked = !!j.accent; $('accent').value = j.accent || '#0a84ff'; $('tilt').checked = !!j.tilt;
+  list.replaceChildren();
+  (j.links || []).forEach(l => {
+    const phone = /^tel:/i.test(l.url || '');
+    const row = addRow(phone ? 'phone' : 'link');
+    row.querySelector('.lbl').value = l.label || '';
+    row.querySelector('.url').value = phone ? l.url.replace(/^tel:/i, '') : (l.url || '');
+    row.querySelector('.url').oninput();
+  });
+  if (!list.children.length) addRow();
+  existingAvatar = j.avatar || ''; existingLogo = j.logo || '';
+  pos = { x: j.photoX ?? 50, y: j.photoY ?? 50 };
+  $('zoom').value = j.photoZoom || 1;
+  editingSlug = asEdit ? slug : ''; updateBar(); refreshAdjuster();
 }
 async function loadPage(slug) {
   const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
@@ -364,46 +447,40 @@ async function loadPage(slug) {
       { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
     if (!r.ok) throw new Error('Could not load ' + slug + ' (' + r.status + ')');
     const j = JSON.parse(decodeURIComponent(escape(atob((await r.json()).content.replace(/\n/g, '')))));
-    newPage();
-    $('slug').value = slug; $('name').value = j.name || ''; $('title').value = j.title || ''; $('company').value = j.company || '';
-    $('bio').value = j.bio || ''; $('theme').value = j.theme || 'dark';
-    list.replaceChildren();
-    (j.links || []).forEach(l => {
-      const phone = /^tel:/i.test(l.url || '');
-      const row = addRow(phone ? 'phone' : 'link');
-      row.querySelector('.lbl').value = l.label || '';
-      row.querySelector('.url').value = phone ? l.url.replace(/^tel:/i, '') : (l.url || '');
-      row.querySelector('.url').oninput();
-    });
-    if (!list.children.length) addRow();
-    existingAvatar = j.avatar || '';
-    pos = { x: j.photoX ?? 50, y: j.photoY ?? 50 };
-    $('zoom').value = j.photoZoom || 1;
-    editingSlug = slug; updateBar(); refreshAdjuster();
+    fillForm(j, slug, true);
     $('msg').textContent = 'Editing ' + slug + '. Change what you need, then press Save page.';
+    toast('Loaded ' + slug);
     $('slug').scrollIntoView({ behavior: 'smooth', block: 'center' });
-  } catch (e) { $('msg').textContent = e.message; }
+  } catch (e) { $('msg').textContent = e.message; toast(e.message, 'err'); }
 }
 $('newpage').onclick = newPage;
 
 // ---- photo ----
+$('logo').onchange = e => {
+  logoFile = e.target.files[0] || null;
+  logoUrl = logoFile ? URL.createObjectURL(logoFile) : '';
+  preview();
+};
 $('photo').onchange = e => {
   photo = e.target.files[0] || null;
   photoUrl = photo ? URL.createObjectURL(photo) : '';
   refreshAdjuster();
 };
-function resize(file) {
+function encode(file, maxDim, alpha) {
   return new Promise((ok, bad) => {
     const img = new Image();
     img.onload = () => {
-      const s = Math.min(1, 1200 / Math.max(img.width, img.height));
+      const s = Math.min(1, maxDim / Math.max(img.width, img.height));
       const c = document.createElement('canvas');
-      c.width = Math.round(img.width * s);
-      c.height = Math.round(img.height * s);
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
       const x = c.getContext('2d');
-      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      if (!alpha) { x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); }
       x.drawImage(img, 0, 0, c.width, c.height);
-      ok(c.toDataURL('image/jpeg', 0.85).split(',')[1]);
+      let url = c.toDataURL('image/webp', 0.85), ext = 'webp';
+      if (!url.startsWith('data:image/webp')) {
+        if (alpha) { url = c.toDataURL('image/png'); ext = 'png'; } else { url = c.toDataURL('image/jpeg', 0.85); ext = 'jpg'; }
+      }
+      ok({ b64: url.split(',')[1], ext });
     };
     img.onerror = () => bad(new Error('Could not read that image.'));
     img.src = URL.createObjectURL(file);
@@ -436,26 +513,99 @@ $('save').onclick = async () => {
     if (existingAvatar) avatar = existingAvatar;
 
     if (photo) {
-      const p = `images/${slug}-${Date.now().toString(36)}.jpg`;
-      const r = await fetch(api(p), { method: 'PUT', headers,
-        body: JSON.stringify({ message: 'Add photo for ' + slug, content: await resize(photo) }) });
+      const up = await encode(photo, 1000, false);
+      const p = `images/${slug}-${Date.now().toString(36)}.${up.ext}`;
+      const r = await fetch(api(p), { method: 'PUT', headers, body: JSON.stringify({ message: 'Add photo for ' + slug, content: up.b64 }) });
       if (!r.ok) throw new Error('Photo upload failed (' + r.status + '): ' + await r.text());
       avatar = p;
+    }
+    let logo = existingLogo;
+    if (logoFile) {
+      const up = await encode(logoFile, 600, true);
+      const p = `images/${slug}-logo-${Date.now().toString(36)}.${up.ext}`;
+      const r = await fetch(api(p), { method: 'PUT', headers, body: JSON.stringify({ message: 'Add logo for ' + slug, content: up.b64 }) });
+      if (!r.ok) throw new Error('Logo upload failed (' + r.status + '): ' + await r.text());
+      logo = p;
     }
 
     const r = await fetch(api(`pages/${slug}.json`), { method: 'PUT', headers, body: JSON.stringify({
       message: 'Save page ' + slug,
-      content: btoa(unescape(encodeURIComponent(JSON.stringify(collect(avatar), null, 2)))),
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(collect(avatar, logo), null, 2)))),
       sha
     }) });
     if (!r.ok) throw new Error('Error ' + r.status + ': ' + await r.text());
     msg.textContent = `Saved! Live in about a minute: ${siteBase()}/p/${slug}/`;
-    editingSlug = slug; existingAvatar = avatar; photo = null; updateBar();
+    editingSlug = slug; existingAvatar = avatar; existingLogo = logo; photo = null; logoFile = null; dirty = false; clearDraft(); updateBar();
+    toast('Saved! Live in about a minute.', 'ok');
     setTimeout(loadStats, 75000);
   } catch (e) {
-    msg.textContent = e.message;
+    msg.textContent = e.message; toast(e.message, 'err');
   } finally {
     btn.disabled = false;
   }
 };
+
+// ---- toasts, drafts, shortcuts, templates ----
+function toast(text, kind) {
+  const t = document.createElement('div');
+  t.className = 'toast ' + (kind || ''); t.textContent = text;
+  $('toasts').appendChild(t);
+  setTimeout(() => t.classList.add('out'), 3200);
+  setTimeout(() => t.remove(), 3700);
+}
+const DRAFT = 'lib_draft';
+let draftTimer;
+function markDirty() { dirty = true; saveDraftSoon(); }
+function saveDraftSoon() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    try { if (dirty) localStorage.setItem(DRAFT, JSON.stringify({ slug: $('slug').value, editing: editingSlug, data: collect(existingAvatar, existingLogo) })); } catch (e) {}
+  }, 800);
+}
+function clearDraft() { clearTimeout(draftTimer); try { localStorage.removeItem(DRAFT); } catch (e) {} }
+$('p-editor').addEventListener('input', markDirty);
+$('p-editor').addEventListener('change', markDirty);
+addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's' && !$('p-editor').hidden) { e.preventDefault(); $('save').click(); }
+});
+(function initDraft() {
+  try {
+    const dr = JSON.parse(localStorage.getItem(DRAFT) || 'null');
+    if (!dr || !dr.data || !(dr.data.name || dr.slug)) return;
+    $('draftbar').hidden = false;
+    $('draftrestore').onclick = () => {
+      fillForm(dr.data, dr.slug, false); editingSlug = dr.editing || ''; updateBar();
+      dirty = true; $('draftbar').hidden = true; showTab('editor'); toast('Draft restored', 'ok');
+    };
+    $('draftdiscard').onclick = () => { clearDraft(); $('draftbar').hidden = true; };
+  } catch (e) {}
+})();
+
+const tplKey = 'lib_templates';
+const getTpls = () => { try { return JSON.parse(localStorage.getItem(tplKey) || '{}'); } catch (e) { return {}; } };
+const design = () => ({ theme: $('theme').value, font: $('font').value, btnStyle: $('btnstyle').value, accent: $('useaccent').checked ? $('accent').value : '', tilt: $('tilt').checked });
+function applyDesign(d) {
+  $('theme').value = d.theme || 'dark'; $('font').value = d.font || 'modern'; $('btnstyle').value = d.btnStyle || 'solid';
+  $('useaccent').checked = !!d.accent; if (d.accent) $('accent').value = d.accent; $('tilt').checked = !!d.tilt;
+}
+function refreshTpls() {
+  $('tplsel').replaceChildren(new Option('Templates…', ''), ...Object.keys(getTpls()).map(k => new Option(k, k)));
+}
+$('tplsave').onclick = () => {
+  const n = (prompt('Name this design template:') || '').trim();
+  if (!n) return;
+  const t = getTpls(); t[n] = design();
+  localStorage.setItem(tplKey, JSON.stringify(t)); refreshTpls(); $('tplsel').value = n; toast('Template saved', 'ok');
+};
+$('tplsel').onchange = () => {
+  const d = getTpls()[$('tplsel').value];
+  if (d) { applyDesign(d); preview(); markDirty(); toast('Template applied'); }
+};
+$('tpldel').onclick = () => {
+  const k = $('tplsel').value, t = getTpls();
+  if (!k || !t[k] || !confirm('Delete template "' + k + '"?')) return;
+  delete t[k]; localStorage.setItem(tplKey, JSON.stringify(t)); refreshTpls(); toast('Template deleted');
+};
+refreshTpls();
 </script></body></html>
