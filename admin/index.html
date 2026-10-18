@@ -490,6 +490,39 @@ function encode(file, maxDim, alpha) {
   });
 }
 
+// ---- commit several files at once ----
+async function commitFiles(owner, repo, files, message) {
+  const base = `https://api.github.com/repos/${owner}/${repo}`;
+  const H = { Authorization: 'Bearer ' + $('token').value.trim(), Accept: 'application/vnd.github+json' };
+  const J = { ...H, 'Content-Type': 'application/json' };
+  const gh = async (url, opts) => { const r = await fetch(url, opts); if (!r.ok) throw new Error(url.split('/').slice(-2).join('/') + ' ' + r.status); return r.json(); };
+  try {
+    const branch = (await gh(base, { headers: H })).default_branch;
+    const parentSha = (await gh(`${base}/git/ref/heads/${branch}`, { headers: H })).object.sha;
+    const parent = await gh(`${base}/git/commits/${parentSha}`, { headers: H });
+    const entries = [];
+    for (const f of files) {
+      if (f.b64) {
+        const b = await gh(`${base}/git/blobs`, { method: 'POST', headers: J, body: JSON.stringify({ content: f.b64, encoding: 'base64' }) });
+        entries.push({ path: f.path, mode: '100644', type: 'blob', sha: b.sha });
+      } else entries.push({ path: f.path, mode: '100644', type: 'blob', content: f.text });
+    }
+    const tree = await gh(`${base}/git/trees`, { method: 'POST', headers: J, body: JSON.stringify({ base_tree: parent.tree.sha, tree: entries }) });
+    const commit = await gh(`${base}/git/commits`, { method: 'POST', headers: J, body: JSON.stringify({ message, tree: tree.sha, parents: [parentSha] }) });
+    await gh(`${base}/git/refs/heads/${branch}`, { method: 'PATCH', headers: J, body: JSON.stringify({ sha: commit.sha }) });
+    return 'one';
+  } catch (err) {
+    // fallback: one commit per file through the contents API
+    for (const f of files) {
+      const body = { message, content: f.b64 || btoa(unescape(encodeURIComponent(f.text))) };
+      if (f.sha) body.sha = f.sha;
+      const r = await fetch(`${base}/contents/${f.path}`, { method: 'PUT', headers: J, body: JSON.stringify(body) });
+      if (!r.ok) throw new Error('Error ' + r.status + ': ' + await r.text());
+    }
+    return 'many';
+  }
+}
+
 // ---- save ----
 $('save').onclick = async () => {
   const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
@@ -515,29 +548,22 @@ $('save').onclick = async () => {
     if (ex.ok && editingSlug !== slug && !confirm('A page named "' + slug + '" already exists. Replace it?')) { msg.textContent = 'Cancelled.'; return; }
     if (existingAvatar) avatar = existingAvatar;
 
+    // everything goes into ONE commit (photo + logo + page), so the site rebuilds only once
+    const files = [];
     if (photo) {
       const up = await encode(photo, 1000, false);
-      const p = `images/${slug}-${Date.now().toString(36)}.${up.ext}`;
-      const r = await fetch(api(p), { method: 'PUT', headers, body: JSON.stringify({ message: 'Add photo for ' + slug, content: up.b64 }) });
-      if (!r.ok) throw new Error('Photo upload failed (' + r.status + '): ' + await r.text());
-      avatar = p;
+      avatar = `images/${slug}-${Date.now().toString(36)}.${up.ext}`;
+      files.push({ path: avatar, b64: up.b64 });
     }
     let logo = existingLogo;
     if (logoFile) {
       const up = await encode(logoFile, 600, true);
-      const p = `images/${slug}-logo-${Date.now().toString(36)}.${up.ext}`;
-      const r = await fetch(api(p), { method: 'PUT', headers, body: JSON.stringify({ message: 'Add logo for ' + slug, content: up.b64 }) });
-      if (!r.ok) throw new Error('Logo upload failed (' + r.status + '): ' + await r.text());
-      logo = p;
+      logo = `images/${slug}-logo-${Date.now().toString(36)}.${up.ext}`;
+      files.push({ path: logo, b64: up.b64 });
     }
-
-    const r = await fetch(api(`pages/${slug}.json`), { method: 'PUT', headers, body: JSON.stringify({
-      message: 'Save page ' + slug,
-      content: btoa(unescape(encodeURIComponent(JSON.stringify(collect(avatar, logo), null, 2)))),
-      sha
-    }) });
-    if (!r.ok) throw new Error('Error ' + r.status + ': ' + await r.text());
-    msg.textContent = `Saved! Live in about a minute: ${siteBase()}/p/${slug}/`;
+    files.push({ path: `pages/${slug}.json`, text: JSON.stringify(collect(avatar, logo), null, 2), sha });
+    const mode = await commitFiles(owner, repo, files, 'Save page ' + slug);
+    msg.textContent = `Saved! Live in about a minute: ${siteBase()}/p/${slug}/` + (mode === 'many' ? ' (saved as several commits)' : '');
     editingSlug = slug; existingAvatar = avatar; existingLogo = logo; photo = null; logoFile = null; dirty = false; clearDraft(); updateBar();
     toast('Saved! Live in about a minute.', 'ok');
     setTimeout(loadStats, 75000);
