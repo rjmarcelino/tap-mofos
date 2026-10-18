@@ -75,6 +75,8 @@ input[type=color]{width:64px;height:40px;padding:2px}
 .tpl{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px}
 .tpl select{flex:1;min-width:140px;width:auto}
 .tpl button{width:auto;margin:6px 0;padding:8px 12px;font-size:14px}
+.danger{color:#b3261e;border-color:#b3261e}
+[data-theme=dark] .danger{color:#ff8a80;border-color:#ff8a80}
 .grip{cursor:grab;user-select:none;opacity:.6;font-size:18px}
 .rb{display:flex;gap:4px}
 #toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:50}
@@ -116,7 +118,7 @@ input[type=color]{width:64px;height:40px;padding:2px}
     <section id="p-editor" class="editor">
       <div>
         <div id="draftbar" class="editbar" hidden><span>You have an unsaved draft.</span><span><button id="draftrestore" type="button">Restore</button> <button id="draftdiscard" type="button">Discard</button></span></div>
-        <div id="editbar" class="editbar" hidden><span>Editing <b id="editname"></b></span><button id="newpage" type="button">New page</button></div>
+        <div id="editbar" class="editbar" hidden><span>Editing <b id="editname"></b></span><span><button id="newpage" type="button">New page</button> <button id="deletepage" type="button" class="danger">Delete page</button></span></div>
         <input id="slug" placeholder="Slug (e.g. jane) - becomes the link">
         <input id="name" placeholder="Display name">
         <input id="title" placeholder="Job title (optional)">
@@ -265,7 +267,7 @@ document.addEventListener('change', preview);
 
 // ---- dashboard ----
 function pageCard(p) {
-  const d = document.createElement('div'); d.className = 'pc';
+  const d = document.createElement('div'); d.className = 'pc'; d.dataset.slug = p.slug;
   let av;
   if (p.avatar) { av = document.createElement('img'); av.src = /^https?:/i.test(p.avatar) ? p.avatar : '../' + p.avatar; av.alt = ''; }
   else { av = document.createElement('div'); av.textContent = (p.name || p.slug || '?').charAt(0).toUpperCase(); }
@@ -283,7 +285,8 @@ function pageCard(p) {
   const q = document.createElement('button'); q.type = 'button'; q.textContent = 'QR';
   q.onclick = () => downloadQr(p.slug, p.accent, absUrl(p.logo || p.avatar), !!p.logo);
   const btns = document.createElement('div'); btns.className = 'btns'; const ed = document.createElement('button'); ed.type = 'button'; ed.textContent = 'Edit'; ed.onclick = () => loadPage(p.slug);
-  btns.append(ed, b, q);
+  const del = document.createElement('button'); del.type = 'button'; del.textContent = 'Delete'; del.className = 'danger'; del.onclick = () => deletePage(p.slug, d);
+  btns.append(ed, b, q, del);
   d.append(av, info, btns);
   return d;
 }
@@ -544,6 +547,64 @@ $('save').onclick = async () => {
     btn.disabled = false;
   }
 };
+
+// ---- delete pages ----
+async function deletePage(slug, card) {
+  const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
+  if (!owner || !repo || !token) { showTab('settings'); $('connmsg').textContent = 'Enter your GitHub username, repo and token here, then try deleting again.'; return; }
+  const typed = prompt('This permanently deletes "' + slug + '" and its photo and logo.\nIts link, QR codes and NFC tags will stop working.\n\nType the slug to confirm:');
+  if (typed === null) return;
+  if (typed.trim() !== slug) { toast('That did not match. Nothing was deleted.', 'err'); return; }
+
+  const base = `https://api.github.com/repos/${owner}/${repo}`;
+  const H = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
+  const J = { ...H, 'Content-Type': 'application/json' };
+  const gh = async (url, opts) => { const r = await fetch(url, opts); if (!r.ok) throw new Error(url.split('/').slice(-2).join('/') + ' ' + r.status); return r.json(); };
+  toast('Deleting ' + slug + '...');
+  try {
+    const pr = await fetch(`${base}/contents/pages/${slug}.json`, { headers: H, cache: 'no-store' });
+    if (!pr.ok) throw new Error('Could not find pages/' + slug + '.json (' + pr.status + ')');
+    const pj = await pr.json();
+    let data = {};
+    try { data = JSON.parse(decodeURIComponent(escape(atob(pj.content.replace(/\n/g, ''))))); } catch (e) {}
+
+    // delete the photo/logo too, unless another page still uses the same file
+    const paths = ['pages/' + slug + '.json'];
+    let others = null;
+    try { others = (await (await fetch('../pages.json', { cache: 'no-store' })).json()).filter(x => x.slug !== slug); } catch (e) {}
+    const used = new Set((others || []).flatMap(x => [x.avatar, x.logo]));
+    [data.avatar, data.logo].forEach(p => { if (others && p && /^images\//.test(p) && !p.includes('..') && !used.has(p)) paths.push(p); });
+
+    let both = true;
+    try {
+      // one commit for everything, so the site only rebuilds once
+      const branch = (await gh(base, { headers: H })).default_branch;
+      const parentSha = (await gh(`${base}/git/ref/heads/${branch}`, { headers: H })).object.sha;
+      const parent = await gh(`${base}/git/commits/${parentSha}`, { headers: H });
+      const tree = await gh(`${base}/git/trees`, { method: 'POST', headers: J,
+        body: JSON.stringify({ base_tree: parent.tree.sha, tree: paths.map(p => ({ path: p, mode: '100644', type: 'blob', sha: null })) }) });
+      const commit = await gh(`${base}/git/commits`, { method: 'POST', headers: J,
+        body: JSON.stringify({ message: 'Delete page ' + slug, tree: tree.sha, parents: [parentSha] }) });
+      await gh(`${base}/git/refs/heads/${branch}`, { method: 'PATCH', headers: J, body: JSON.stringify({ sha: commit.sha }) });
+    } catch (err) {
+      // fallback: remove just the page file
+      const d = await fetch(`${base}/contents/pages/${slug}.json`, { method: 'DELETE', headers: J,
+        body: JSON.stringify({ message: 'Delete page ' + slug, sha: pj.sha }) });
+      if (!d.ok) throw new Error('Delete failed (' + d.status + '): ' + await d.text());
+      both = false;
+    }
+
+    if (editingSlug === slug) newPage();
+    if (!card) card = [...$('grid').children].find(c => c.dataset.slug === slug);
+    if (card) { card.remove(); $('cnt').textContent = $('grid').children.length; }
+    $('msg').textContent = 'Deleted ' + slug + '.';
+    toast(both ? 'Deleted ' + slug : 'Deleted ' + slug + ' (its image files were left in the repo)', 'ok');
+    setTimeout(loadStats, 75000);
+  } catch (e) {
+    $('msg').textContent = e.message; toast('Delete failed: ' + e.message, 'err');
+  }
+}
+$('deletepage').onclick = () => deletePage(editingSlug, null);
 
 // ---- toasts, drafts, shortcuts, templates ----
 function toast(text, kind) {
