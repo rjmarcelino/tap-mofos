@@ -1,0 +1,27 @@
+{
+  "name": "Jane Carla Marcelino",
+  "title": "Health and Life Sciences Pathway",
+  "company": "Batangas College of Arts and Sciences",
+  "bio": "",
+  "avatar": "images/jane-mvdcmsy5.jpg",
+  "theme": "dark",
+  "site": "https://rjmarcelino.github.io/tap-mofos",
+  "links": [
+    {
+      "label": "Add me on Facebook!",
+      "url": "https://www.facebook.com/share/1BRAdw1Bi8/?mibextid=wwXIfr"
+    },
+    {
+      "label": "Hit me up on Insta!",
+      "url": "https://www.instagram.com/enajcm_?vrfl=NXNqaG80ZGh0cDNh&utm_source=qr"
+    },
+    {
+      "label": "Follow me on Tiktok!",
+      "url": "https://www.tiktok.com/@janechyma_"
+    },
+    {
+      "label": "Phone number",
+      "url": "tel:09762587580"
+    }
+  ]
+}
