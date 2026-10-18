@@ -4,89 +4,133 @@
 <title>Link-in-bio builder</title>
 <style>
 *{box-sizing:border-box}
-body{font-family:system-ui,sans-serif;margin:24px auto;padding:0 16px 60px;max-width:560px}
+body{font-family:system-ui,sans-serif;margin:0;padding:16px 16px 60px}
 input,textarea,select,button{width:100%;padding:10px;margin:6px 0;font:inherit;font-size:16px}
 button{cursor:pointer}
 label{display:block;margin-top:16px;font-weight:600}
 small{color:#666}
+[hidden]{display:none!important}
+
+/* top bar + tabs */
+.bar{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:8px;border-bottom:1px solid #bbb;margin-bottom:20px}
+.bar h2{margin:0 0 8px}
+.tabs{display:flex;gap:4px}
+.tabs button{width:auto;margin:0 0 -1px;padding:8px 22px;font-size:15px;border:1px solid #bbb;border-bottom:none;border-radius:8px 8px 0 0;background:#f1f1f1}
+.tabs button.on{background:#fff;font-weight:700;border-bottom:1px solid #fff}
+
+/* layout (mobile: stacked) */
+.layout > aside{margin-bottom:20px}
+#pvbox{margin-top:28px}
+#pv{display:block;width:100%;max-width:520px;height:min(900px,calc(100vh - 96px));min-height:520px;margin:8px auto 0;border:8px solid #222;border-radius:30px;background:#fff}
+#settings{max-width:520px}
+
+/* link rows */
 .row{border:1px solid #bbb;border-radius:8px;padding:6px 10px 10px;margin:10px 0}
 .top{display:flex;justify-content:space-between;align-items:center}
 .top button{width:auto;margin:0;padding:4px 12px;font-size:14px}
 .lh{display:flex;align-items:center;gap:8px}
 .ico{display:flex}
 .ico svg{width:22px;height:22px;display:block}
-#dash{margin-bottom:8px}
+
+/* dashboard */
 .stat{display:flex;align-items:baseline;gap:10px;padding:14px;border:1px solid #bbb;border-radius:10px}
 .stat b{font-size:40px;line-height:1}
 .stat span{flex:1;color:#444}
 .stat button,.pc button{width:auto;margin:0;padding:6px 10px;font-size:14px}
-.pc{display:flex;align-items:center;gap:10px;border:1px solid #ddd;border-radius:10px;padding:8px 10px;margin:8px 0}
+.pc{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border:1px solid #ddd;border-radius:10px;padding:8px 10px;margin:8px 0}
 .av{width:44px;height:44px;border-radius:50%;object-fit:cover;background:#ccc;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
 .pi{flex:1;min-width:0;display:flex;flex-direction:column}
 .pi a,.pi small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.btns{display:flex;gap:6px}
-#pvbox{margin-top:28px}
-#pv{display:block;width:100%;max-width:360px;height:640px;margin:8px auto 0;border:8px solid #222;border-radius:28px;background:#fff}
-[hidden]{display:none!important}
+.btns{display:flex;gap:6px;flex-basis:100%}
+
+/* edit bar + photo adjuster */
 .editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin:8px 0;border:1px solid #2b7;border-radius:8px;background:#eafaf1}
 .editbar button{width:auto;margin:0;padding:4px 12px;font-size:14px}
-.btns{flex-wrap:wrap;justify-content:flex-end}
 #frame{position:relative;width:60%;max-width:260px;aspect-ratio:5/6;margin:8px 0;overflow:hidden;background:#ccc;cursor:crosshair;touch-action:none}
 #adjimg{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 #box{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none}
+
+/* desktop: dashboard | editor | preview */
 @media(min-width:960px){
-  body{max-width:1000px}
-  .wrap{display:grid;grid-template-columns:minmax(0,540px) 380px;gap:32px}
-  #pvbox{position:sticky;top:16px;align-self:start;margin-top:0}
+  body{padding:20px 28px 60px}
+  .layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:32px;align-items:start}
+  .layout > aside#dash{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto;margin:0}
+}
+@media(min-width:1280px){
+  .editor{display:grid;grid-template-columns:minmax(360px,480px) minmax(0,1fr);gap:40px;align-items:start}
+  #pvbox{position:sticky;top:16px;margin-top:0}
 }
 </style></head>
 <body>
-<h2>Link-in-bio builder</h2>
-<div class="wrap">
-<div>
-  <div id="dash">
+<div class="bar">
+  <h2>Link-in-bio builder</h2>
+  <nav class="tabs">
+    <button id="tab-editor" type="button" class="on">Editor</button>
+    <button id="tab-settings" type="button">Settings</button>
+  </nav>
+</div>
+
+<div class="layout">
+  <aside id="dash">
     <div class="stat"><b id="cnt">–</b><span>active pages</span><button id="refresh" type="button">Refresh</button></div>
     <div id="grid"></div>
     <small id="statmsg"></small>
-  </div>
-  <hr>
-  <input id="owner" placeholder="GitHub username">
-  <input id="repo" placeholder="Repo name">
-  <input id="token" type="password" placeholder="Fine-grained token">
-  <input id="site" placeholder="Site address (e.g. https://myproject.pages.dev)">
-  <small>The site address is used for the saved link, QR codes, and share previews. Leave empty to use github.io.</small>
-  <hr>
+  </aside>
 
-  <div id="editbar" class="editbar" hidden><span>Editing <b id="editname"></b></span><button id="newpage" type="button">New page</button></div>
-  <input id="slug" placeholder="Slug (e.g. jane) - becomes the link">
-  <input id="name" placeholder="Display name">
-  <input id="title" placeholder="Job title (optional)">
-  <input id="company" placeholder="Company (optional)">
-  <input id="bio" placeholder="Bio">
-  <select id="theme"><option>dark</option><option>light</option><option>ocean</option></select>
+  <main>
+    <section id="p-editor" class="editor">
+      <div>
+        <div id="editbar" class="editbar" hidden><span>Editing <b id="editname"></b></span><button id="newpage" type="button">New page</button></div>
+        <input id="slug" placeholder="Slug (e.g. jane) - becomes the link">
+        <input id="name" placeholder="Display name">
+        <input id="title" placeholder="Job title (optional)">
+        <input id="company" placeholder="Company (optional)">
+        <input id="bio" placeholder="Bio">
+        <select id="theme"><option>dark</option><option>light</option><option>ocean</option></select>
 
-  <label for="photo">Profile photo</label>
-  <input id="photo" type="file" accept="image/*">
-  <small>Shown at the top of your page and fades out before the first button. Leave empty to keep the current photo.</small>
-  <div id="adj" hidden>
-    <label>Photo position &amp; zoom</label>
-    <div id="frame"><img id="adjimg" alt=""><div id="box"></div></div>
-    <input id="zoom" type="range" min="1" max="3" step="0.05" value="1">
-    <small>Drag on the photo to choose the area to focus on, and use the slider to zoom. The white box shows what stays visible. The live preview shows the result.</small>
-    <button id="resetpos" type="button">Reset position</button>
-  </div>
+        <label for="photo">Profile photo</label>
+        <input id="photo" type="file" accept="image/*">
+        <small>Shown at the top of your page and fades out before the first button. Leave empty to keep the current photo.</small>
+        <div id="adj" hidden>
+          <label>Photo position &amp; zoom</label>
+          <div id="frame"><img id="adjimg" alt=""><div id="box"></div></div>
+          <input id="zoom" type="range" min="1" max="3" step="0.05" value="1">
+          <small>Drag on the photo to choose the area to focus on, and use the slider to zoom. The white box shows what stays visible. The live preview shows the result.</small>
+          <button id="resetpos" type="button">Reset position</button>
+        </div>
 
-  <label>Links</label>
-  <div id="links"></div>
-  <button id="add" type="button">+ Add link</button>
-  <button id="addphone" type="button">+ Add phone number</button>
-  <small>A "Save contact" button appears on the page when it has a phone number or an email link (mailto:you@example.com).</small>
+        <label>Links</label>
+        <div id="links"></div>
+        <button id="add" type="button">+ Add link</button>
+        <button id="addphone" type="button">+ Add phone number</button>
+        <small>A "Save contact" button appears on the page when it has a phone number or an email link (mailto:you@example.com).</small>
 
-  <button id="save" type="button">Save page</button>
-  <button id="qr" type="button">Download QR code for this slug</button>
-  <p id="msg"></p>
-</div>
-<aside id="pvbox"><b>Live preview</b><iframe id="pv" title="Live preview"></iframe></aside>
+        <button id="save" type="button">Save page</button>
+        <button id="qr" type="button">Download QR code for this slug</button>
+        <p id="msg"></p>
+      </div>
+      <aside id="pvbox"><b>Live preview</b><iframe id="pv" title="Live preview"></iframe></aside>
+    </section>
+
+    <section id="p-settings" hidden>
+      <div id="settings">
+        <h3>Settings</h3>
+        <small>These are stored only in this browser. They tell the builder which GitHub repo to save your pages to.</small>
+        <label for="owner">GitHub username</label>
+        <input id="owner" placeholder="e.g. janedoe">
+        <label for="repo">Repo name</label>
+        <input id="repo" placeholder="e.g. tap-mofos">
+        <label for="token">Fine-grained token</label>
+        <input id="token" type="password" placeholder="github_pat_...">
+        <small>The token needs access to this repo only, with Contents set to Read and write.</small>
+        <label for="site">Site address</label>
+        <input id="site" placeholder="e.g. https://myproject.pages.dev">
+        <small>Used for the saved link, QR codes, and share previews. Leave empty to use your github.io address.</small>
+        <button id="testconn" type="button">Test connection</button>
+        <p id="connmsg"></p>
+      </div>
+    </section>
+  </main>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
@@ -97,6 +141,34 @@ const $ = id => document.getElementById(id);
   $(k).value = localStorage.getItem('lib_' + k) || '';
   $(k).addEventListener('change', () => localStorage.setItem('lib_' + k, $(k).value.trim()));
 });
+
+// ---- tabs + settings ----
+function showTab(name) {
+  $('p-editor').hidden = name !== 'editor';
+  $('p-settings').hidden = name !== 'settings';
+  $('tab-editor').classList.toggle('on', name === 'editor');
+  $('tab-settings').classList.toggle('on', name === 'settings');
+}
+$('tab-editor').onclick = () => showTab('editor');
+$('tab-settings').onclick = () => showTab('settings');
+if (!$('owner').value || !$('repo').value || !$('token').value) showTab('settings');
+
+$('testconn').onclick = async () => {
+  const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
+  const m = $('connmsg');
+  if (!owner || !repo || !token) { m.textContent = 'Fill in the username, repo and token first.'; return; }
+  m.textContent = 'Testing...';
+  try {
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}`,
+      { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' } });
+    if (!r.ok) throw new Error(r.status === 404 ? 'Repo not found, or the token has no access to it (404).'
+      : r.status === 401 ? 'The token was rejected (401). Check that it was copied in full.' : 'GitHub replied with ' + r.status);
+    const j = await r.json();
+    m.textContent = j.permissions && j.permissions.push === false
+      ? 'Connected, but this token cannot write to the repo. Set Contents to Read and write.'
+      : 'Connected to ' + j.full_name + '.';
+  } catch (e) { m.textContent = e.message; }
+};
 
 const siteBase = () => {
   const s = $('site').value.trim().replace(/\/+$/, '');
@@ -258,7 +330,7 @@ function newPage() {
 }
 async function loadPage(slug) {
   const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
-  if (!owner || !repo || !token) { alert('Enter your GitHub username, repo and token first.'); return; }
+  if (!owner || !repo || !token) { showTab('settings'); $('connmsg').textContent = 'Enter your GitHub username, repo and token here, then press Edit again.'; return; }
   $('msg').textContent = 'Loading ' + slug + '...';
   try {
     const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/pages/${slug}.json`,
@@ -316,7 +388,8 @@ $('save').onclick = async () => {
   const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
   const slug = slugOf();
   const msg = $('msg'), btn = $('save');
-  if (!owner || !repo || !token || !slug) { msg.textContent = 'Fill owner, repo, token and slug.'; return; }
+  if (!owner || !repo || !token) { showTab('settings'); $('connmsg').textContent = 'Enter your GitHub username, repo and token here, then go back to the Editor and save.'; return; }
+  if (!slug) { msg.textContent = 'Enter a slug first.'; return; }
 
   const api = p => `https://api.github.com/repos/${owner}/${repo}/contents/${p}`;
   const headers = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
