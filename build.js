@@ -3,6 +3,9 @@ const path = require('path');
 const { render, vcard, hasContact } = require('./render.js');
 
 const out = 'dist';
+// Optional: set SITE_URL in your host's environment settings (e.g. https://myproject.pages.dev) so share previews
+// always use the live address, even for pages saved while the site lived somewhere else.
+const SITE = (process.env.SITE_URL || '').trim().replace(/\/+$/, '');
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(`${out}/p`, { recursive: true });
 
@@ -13,7 +16,7 @@ for (const f of fs.readdirSync('pages').filter(f => f.endsWith('.json'))) {
   try {
     const data = JSON.parse(fs.readFileSync(`pages/${f}`, 'utf8'));
     fs.mkdirSync(`${out}/p/${slug}`, { recursive: true });
-    fs.writeFileSync(`${out}/p/${slug}/index.html`, render(data, { slug }));
+    fs.writeFileSync(`${out}/p/${slug}/index.html`, render(SITE ? { ...data, site: SITE } : data, { slug }));
     if (hasContact(data)) fs.writeFileSync(`${out}/p/${slug}/contact.vcf`, vcard(data));
     manifest.push({ slug, name: data.name || slug, avatar: data.avatar || '', logo: data.logo || '', accent: data.accent || '', links: (data.links || []).length });
   } catch (e) {
