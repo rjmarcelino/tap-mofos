@@ -178,7 +178,7 @@ input[type=color]{width:64px;height:40px;padding:2px}
         <small>The token needs access to this repo only, with Contents set to Read and write.</small>
         <label for="site">Site address</label>
         <input id="site" placeholder="e.g. https://myproject.pages.dev">
-        <small>Used for the saved link, QR codes, and share previews. Leave empty to use your github.io address.</small>
+        <small>Used for the saved link, QR codes, and share previews. Leave empty to use the address this admin page is opened from.</small>
         <button id="testconn" type="button">Test connection</button>
         <p id="connmsg"></p>
       </div>
@@ -234,8 +234,8 @@ $('testconn').onclick = async () => {
 const siteBase = () => {
   const s = $('site').value.trim().replace(/\/+$/, '');
   if (s) return /^https?:\/\//i.test(s) ? s : 'https://' + s;
-  const o = $('owner').value.trim(), r = $('repo').value.trim();
-  return o && r ? `https://${o}.github.io/${r}` : '';
+  // default: the address this admin page is served from (works on Netlify, Cloudflare, GitHub Pages)
+  return new URL('..', location.href).href.replace(/\/$/, '');
 };
 const slugOf = () => $('slug').value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-');
 const fixUrl = u => !u ? '' : /^[a-z][a-z0-9+.-]*:/i.test(u) ? u : 'https://' + u;
