@@ -1,0 +1,35 @@
+{
+  "name": "Rommel John Christian Marcelino",
+  "title": "Engage Client Dedicate Trainer",
+  "company": "TTEC",
+  "bio": "",
+  "avatar": "images/rjcam-mvdnqtb9.webp",
+  "photoZoom": 1.05,
+  "photoX": 50,
+  "photoY": 50,
+  "logo": "images/rjcam-logo-mvdnquih.webp",
+  "accent": "#1eff00",
+  "font": "modern",
+  "btnStyle": "solid",
+  "tilt": false,
+  "theme": "dark",
+  "site": "https://rjmarcelino.github.io/tap-mofos",
+  "links": [
+    {
+      "label": "Add me on Facebook",
+      "url": "https://www.facebook.com/rjcam031"
+    },
+    {
+      "label": "Hit me up on Insta",
+      "url": "https://instagram.com/rmmlmrcln"
+    },
+    {
+      "label": "Watch me Stream on Tiktok",
+      "url": "https://tiktok.com/@daxdotes"
+    },
+    {
+      "label": "Save 09166828617",
+      "url": "tel:09166828617"
+    }
+  ]
+}
