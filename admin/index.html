@@ -27,6 +27,13 @@ small{color:#666}
 .btns{display:flex;gap:6px}
 #pvbox{margin-top:28px}
 #pv{display:block;width:100%;max-width:360px;height:640px;margin:8px auto 0;border:8px solid #222;border-radius:28px;background:#fff}
+[hidden]{display:none!important}
+.editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;margin:8px 0;border:1px solid #2b7;border-radius:8px;background:#eafaf1}
+.editbar button{width:auto;margin:0;padding:4px 12px;font-size:14px}
+.btns{flex-wrap:wrap;justify-content:flex-end}
+#frame{position:relative;width:60%;max-width:260px;aspect-ratio:5/6;margin:8px 0;overflow:hidden;background:#ccc;cursor:crosshair;touch-action:none}
+#adjimg{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+#box{position:absolute;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(0,0,0,.45);pointer-events:none}
 @media(min-width:960px){
   body{max-width:1000px}
   .wrap{display:grid;grid-template-columns:minmax(0,540px) 380px;gap:32px}
@@ -50,6 +57,7 @@ small{color:#666}
   <small>The site address is used for the saved link, QR codes, and share previews. Leave empty to use github.io.</small>
   <hr>
 
+  <div id="editbar" class="editbar" hidden><span>Editing <b id="editname"></b></span><button id="newpage" type="button">New page</button></div>
   <input id="slug" placeholder="Slug (e.g. jane) - becomes the link">
   <input id="name" placeholder="Display name">
   <input id="title" placeholder="Job title (optional)">
@@ -60,6 +68,13 @@ small{color:#666}
   <label for="photo">Profile photo</label>
   <input id="photo" type="file" accept="image/*">
   <small>Shown at the top of your page and fades out before the first button. Leave empty to keep the current photo.</small>
+  <div id="adj" hidden>
+    <label>Photo position &amp; zoom</label>
+    <div id="frame"><img id="adjimg" alt=""><div id="box"></div></div>
+    <input id="zoom" type="range" min="1" max="3" step="0.05" value="1">
+    <small>Drag on the photo to choose the area to focus on, and use the slider to zoom. The white box shows what stays visible. The live preview shows the result.</small>
+    <button id="resetpos" type="button">Reset position</button>
+  </div>
 
   <label>Links</label>
   <div id="links"></div>
@@ -103,13 +118,13 @@ function getLinks() {
 }
 const collect = avatar => ({
   name: $('name').value, title: $('title').value.trim(), company: $('company').value.trim(), bio: $('bio').value,
-  avatar, theme: $('theme').value, site: siteBase(), links: getLinks()
+  avatar, photoZoom: +$('zoom').value, photoX: Math.round(pos.x), photoY: Math.round(pos.y), theme: $('theme').value, site: siteBase(), links: getLinks()
 });
-let photo = null, photoUrl = '', timer;
+let photo = null, photoUrl = '', timer, existingAvatar = '', editingSlug = '', pos = { x: 50, y: 50 };
 function preview() {
   clearTimeout(timer);
   timer = setTimeout(() => {
-    if (window.Cards) $('pv').srcdoc = Cards.render(collect(photoUrl), { slug: slugOf() });
+    if (window.Cards) $('pv').srcdoc = Cards.render(collect(curPhoto()), { slug: slugOf(), preview: true });
   }, 150);
 }
 document.addEventListener('input', preview);
@@ -134,7 +149,8 @@ function pageCard(p) {
   };
   const q = document.createElement('button'); q.type = 'button'; q.textContent = 'QR';
   q.onclick = () => downloadQr(p.slug);
-  const btns = document.createElement('div'); btns.className = 'btns'; btns.append(b, q);
+  const btns = document.createElement('div'); btns.className = 'btns'; const ed = document.createElement('button'); ed.type = 'button'; ed.textContent = 'Edit'; ed.onclick = () => loadPage(p.slug);
+  btns.append(ed, b, q);
   d.append(av, info, btns);
   return d;
 }
@@ -194,16 +210,88 @@ function addRow(type) {
   list.appendChild(d);
   renumber();
   preview();
+  return d;
 }
 $('add').onclick = () => addRow();
 $('addphone').onclick = () => addRow('phone');
 addRow();
 
+// ---- photo position ----
+const clamp = v => Math.max(0, Math.min(100, v));
+function curPhoto() {
+  if (photoUrl) return photoUrl;
+  if (!existingAvatar) return '';
+  return /^https?:/i.test(existingAvatar) ? existingAvatar : new URL('../' + existingAvatar, location.href).href;
+}
+function drawBox() {
+  const z = +$('zoom').value, b = $('box').style;
+  b.left = pos.x * (1 - 1 / z) + '%'; b.top = pos.y * (1 - 1 / z) + '%';
+  b.width = b.height = 100 / z + '%';
+}
+function refreshAdjuster() {
+  const src = curPhoto();
+  $('adj').hidden = !src;
+  if (src) { $('adjimg').src = src; drawBox(); }
+  preview();
+}
+function setFocus(e) {
+  const r = $('frame').getBoundingClientRect();
+  pos.x = clamp((e.clientX - r.left) / r.width * 100);
+  pos.y = clamp((e.clientY - r.top) / r.height * 100);
+  drawBox(); preview();
+}
+$('frame').addEventListener('pointerdown', e => { $('frame').setPointerCapture(e.pointerId); setFocus(e); $('frame').onpointermove = setFocus; });
+$('frame').addEventListener('pointerup', () => { $('frame').onpointermove = null; });
+$('zoom').addEventListener('input', () => { drawBox(); preview(); });
+$('resetpos').onclick = () => { pos = { x: 50, y: 50 }; $('zoom').value = 1; drawBox(); preview(); };
+
+// ---- edit existing pages ----
+function updateBar() {
+  $('editbar').hidden = !editingSlug;
+  $('editname').textContent = editingSlug;
+}
+function newPage() {
+  editingSlug = ''; existingAvatar = ''; photo = null; photoUrl = ''; $('photo').value = '';
+  ['slug', 'name', 'title', 'company', 'bio'].forEach(k => $(k).value = '');
+  $('theme').value = 'dark'; pos = { x: 50, y: 50 }; $('zoom').value = 1;
+  list.replaceChildren(); addRow(); updateBar(); refreshAdjuster();
+}
+async function loadPage(slug) {
+  const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
+  if (!owner || !repo || !token) { alert('Enter your GitHub username, repo and token first.'); return; }
+  $('msg').textContent = 'Loading ' + slug + '...';
+  try {
+    const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/pages/${slug}.json`,
+      { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+    if (!r.ok) throw new Error('Could not load ' + slug + ' (' + r.status + ')');
+    const j = JSON.parse(decodeURIComponent(escape(atob((await r.json()).content.replace(/\n/g, '')))));
+    newPage();
+    $('slug').value = slug; $('name').value = j.name || ''; $('title').value = j.title || ''; $('company').value = j.company || '';
+    $('bio').value = j.bio || ''; $('theme').value = j.theme || 'dark';
+    list.replaceChildren();
+    (j.links || []).forEach(l => {
+      const phone = /^tel:/i.test(l.url || '');
+      const row = addRow(phone ? 'phone' : 'link');
+      row.querySelector('.lbl').value = l.label || '';
+      row.querySelector('.url').value = phone ? l.url.replace(/^tel:/i, '') : (l.url || '');
+      row.querySelector('.url').oninput();
+    });
+    if (!list.children.length) addRow();
+    existingAvatar = j.avatar || '';
+    pos = { x: j.photoX ?? 50, y: j.photoY ?? 50 };
+    $('zoom').value = j.photoZoom || 1;
+    editingSlug = slug; updateBar(); refreshAdjuster();
+    $('msg').textContent = 'Editing ' + slug + '. Change what you need, then press Save page.';
+    $('slug').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) { $('msg').textContent = e.message; }
+}
+$('newpage').onclick = newPage;
+
 // ---- photo ----
 $('photo').onchange = e => {
   photo = e.target.files[0] || null;
   photoUrl = photo ? URL.createObjectURL(photo) : '';
-  preview();
+  refreshAdjuster();
 };
 function resize(file) {
   return new Promise((ok, bad) => {
@@ -244,6 +332,9 @@ $('save').onclick = async () => {
       try { avatar = JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g, ''))))).avatar || ''; } catch (e) {}
     }
 
+    if (ex.ok && editingSlug !== slug && !confirm('A page named "' + slug + '" already exists. Replace it?')) { msg.textContent = 'Cancelled.'; return; }
+    if (existingAvatar) avatar = existingAvatar;
+
     if (photo) {
       const p = `images/${slug}-${Date.now().toString(36)}.jpg`;
       const r = await fetch(api(p), { method: 'PUT', headers,
@@ -259,6 +350,7 @@ $('save').onclick = async () => {
     }) });
     if (!r.ok) throw new Error('Error ' + r.status + ': ' + await r.text());
     msg.textContent = `Saved! Live in about a minute: ${siteBase()}/p/${slug}/`;
+    editingSlug = slug; existingAvatar = avatar; photo = null; updateBar();
     setTimeout(loadStats, 75000);
   } catch (e) {
     msg.textContent = e.message;
