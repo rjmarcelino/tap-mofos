@@ -71,7 +71,16 @@
     const roleTxt = [p.title, p.company].filter(Boolean).join(' · ');
     const role = roleTxt ? `<div class="role">${esc(roleTxt)}</div>` : '';
     const save = hasContact(p)
-      ? `<a class="save" href="contact.vcf" download="contact.vcf">${svg('contact')}Save contact</a>` : '';
+      ? `<a class="save" href="contact.vcf">${svg('contact')}Save contact</a>` : '';
+    // iOS Safari ignores the download attribute and needs a text/vcard blob to offer "Add to Contacts"
+    const saveJs = hasContact(p) ? '<script>(function(){var VCF=' + JSON.stringify(vcard(p)).replace(/</g, '\\u003c') + ';'
+      + 'var b=document.querySelector("a.save");if(!b)return;'
+      + 'b.addEventListener("click",function(e){e.preventDefault();'
+      + 'var u=URL.createObjectURL(new Blob([VCF],{type:"text/vcard;charset=utf-8"}));'
+      + 'var ios=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);'
+      + 'if(ios){window.location.href=u;return;}'
+      + 'var a=document.createElement("a");a.href=u;a.download="contact.vcf";document.body.appendChild(a);a.click();a.remove();});'
+      + '})();<\/script>' : '';
     const links = (p.links || []).map(l =>
       `<a href="${esc(safeUrl(l.url))}"${/^https?:/i.test(l.url) ? ' target="_blank" rel="noopener"' : ''}>${svg(iconFor(l.url))}${esc(l.label)}</a>`
     ).join('');
@@ -108,7 +117,7 @@ a:hover{transform:scale(1.02)}
 ${hero}
 <div class="info"><h1>${esc(p.name)}</h1>${role}<p>${esc(p.bio)}</p></div>
 ${save}${links}
-</main></body></html>`;
+</main>${saveJs}</body></html>`;
   }
 
   const api = { render, vcard, hasContact, iconFor, svg };
