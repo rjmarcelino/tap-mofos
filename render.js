@@ -16,6 +16,8 @@
     telegram: '<path d="M21 4 3 11l6 2.2L11 20l3-4.5 5 3.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>',
     phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     email: '<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 7l9 6 9-6" fill="none" stroke="currentColor" stroke-width="2"/>',
+    wallet: '<path d="M17 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2H5" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="16.5" cy="14" r="1.4" fill="currentColor"/>',
+    bank: '<path d="M3 10l9-6 9 6M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 20h18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
     share: '<circle cx="18" cy="5" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="18" cy="19" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8.6 10.6l6.8-4M8.6 13.4l6.8 4" fill="none" stroke="currentColor" stroke-width="2"/>',
     contact: '<circle cx="10" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M2.5 21c0-4 3.4-7 7.5-7s7.5 3 7.5 7M19 7v6M16 10h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
   };
@@ -65,6 +67,19 @@
     return L.join('\r\n') + '\r\n';
   }
 
+  const PROVIDERS = {
+    gcash: { name: 'GCash', color: '#0b6cff', txt: 'G' },
+    maya: { name: 'Maya', color: '#12b76a', txt: 'M' },
+    maribank: { name: 'MariBank', color: '#ff7a1a', txt: 'M' },
+    gotyme: { name: 'GoTyme', color: '#16b3a3', txt: 'G' },
+    bdo: { name: 'BDO', color: '#0a3d91', txt: 'B' },
+    bpi: { name: 'BPI', color: '#b3191f', txt: 'B' },
+    unionbank: { name: 'UnionBank', color: '#f28c1b', txt: 'U' },
+    metrobank: { name: 'Metrobank', color: '#1f3f9a', txt: 'M' },
+    paypal: { name: 'PayPal', color: '#0070ba', txt: 'P' },
+    bank: { name: 'Bank transfer', color: '#4b5563', icon: 'bank', generic: true },
+    ewallet: { name: 'E-wallet', color: '#7c3aed', icon: 'wallet', generic: true }
+  };
   const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
   const FONTS = {
     modern: 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif',
@@ -114,9 +129,51 @@
       + 'if(ios){window.location.href=u;return;}'
       + 'var a=document.createElement("a");a.href=u;a.download="contact.vcf";document.body.appendChild(a);a.click();a.remove();});'
       + '})();<\/script>' : '';
-    const links = (p.links || []).map((l, i) =>
-      `<a class="b" style="--i:${i + (hasContact(p) ? 1 : 0)}" href="${esc(safeUrl(l.url))}"${/^https?:/i.test(l.url) ? ' target="_blank" rel="noopener"' : ''}>${svg(iconFor(l.url))}${esc(l.label)}</a>`
-    ).join('');
+    const payData = [];
+    const links = (p.links || []).map((l, i) => {
+      const idx = i + (hasContact(p) ? 1 : 0);
+      if (l && l.type === 'pay') {
+        const pv = own(PROVIDERS, l.provider) ? PROVIDERS[l.provider] : PROVIDERS.ewallet;
+        const label = String(l.label || '').trim() || 'Pay with ' + pv.name;
+        const icon = l.logo ? `<img class="ic" src="${esc(imgUrl(l.logo))}" alt="">`
+          : `<span class="ic" style="background:${pv.color}">${pv.icon ? svg(pv.icon) : esc(pv.txt)}</span>`;
+        const href = /^https?:\/\//i.test(l.url || '') ? l.url : '';
+        if (!l.qr && !l.number && !l.note) {
+          return href ? `<a class="b" style="--i:${idx}" href="${esc(href)}" target="_blank" rel="noopener">${icon}${esc(label)}</a>` : '';
+        }
+        payData.push({
+          title: pv.generic ? label : pv.name, fname: (pv.name + '-qr').toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          qr: l.qr ? imgUrl(l.qr) : '', name: String(l.name || ''), number: String(l.number || ''), note: String(l.note || ''), url: href
+        });
+        return `<button type="button" class="b" style="--i:${idx}" data-pay="${payData.length - 1}">${icon}${esc(label)}</button>`;
+      }
+      return `<a class="b" style="--i:${idx}" href="${esc(safeUrl(l.url))}"${/^https?:/i.test(l.url) ? ' target="_blank" rel="noopener"' : ''}>${svg(iconFor(l.url))}${esc(l.label)}</a>`;
+    }).join('');
+    const payJs = [
+      'function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}',
+      'var pm=document.getElementById("pm");',
+      'function closePay(){pm.hidden=true}',
+      'function copy(t,b){var o=b.textContent;var d=function(){b.textContent="Copied!";setTimeout(function(){b.textContent=o},1500)};',
+      'if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(d,d)}',
+      'else{var a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy")}catch(e){}a.remove();d()}}',
+      'function saveQr(p){fetch(p.qr).then(function(r){return r.blob()}).then(function(b){',
+      'var f=new File([b],p.fname+".png",{type:b.type||"image/png"});',
+      'if(navigator.canShare&&navigator.canShare({files:[f]})){return navigator.share({files:[f],title:p.title}).catch(function(){})}',
+      'var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=f.name;document.body.appendChild(a);a.click();a.remove()',
+      '}).catch(function(){window.open(p.qr,"_blank")})}',
+      'function openPay(i){var p=PAY[i],c=pm.querySelector(".pmc");c.textContent="";c.appendChild(el("h2","",p.title));',
+      'if(p.qr){var im=el("img","qr");im.src=p.qr;im.alt="QR code";c.appendChild(im);c.appendChild(el("div","hint","Scan it in your app, or save it to your phone."));',
+      'var s=el("button","pbp","Save QR code");s.onclick=function(){saveQr(p)};c.appendChild(s)}',
+      'if(p.name)c.appendChild(el("div","acct",p.name));',
+      'if(p.number){c.appendChild(el("div","num",p.number));var k=el("button","","Copy number");k.onclick=function(){copy(p.number,k)};c.appendChild(k)}',
+      'if(p.note)c.appendChild(el("div","hint",p.note));',
+      'if(p.url){var a=el("a","pb","Open payment link");a.href=p.url;a.target="_blank";a.rel="noopener";c.appendChild(a)}',
+      'var x=el("button","","Close");x.onclick=closePay;c.appendChild(x);pm.hidden=false}',
+      'document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest("[data-pay]");if(b)openPay(+b.getAttribute("data-pay"));else if(e.target===pm)closePay()});',
+      'document.addEventListener("keydown",function(e){if(e.key==="Escape")closePay()});'
+    ].join('');
+    const payHtml = payData.length
+      ? '<div class="pm" id="pm" hidden role="dialog" aria-modal="true"><div class="pmc"></div></div><script>var PAY=' + JSON.stringify(payData).replace(/</g, '\\u003c') + ';' + payJs + '<\/script>' : '';
 
     const site = String(p.site || '').replace(/\/+$/, '');
     const ogImg = site && realAvatar ? (/^https?:/i.test(p.avatar) ? p.avatar : `${site}/${String(p.avatar).replace(/^\/+/, '')}`) : '';
@@ -137,7 +194,7 @@
       + 'var sh=$(".share");if(sh)sh.addEventListener("click",function(){var u=location.href;'
       + 'if(navigator.share){navigator.share({title:document.title,url:u}).catch(function(){})}'
       + 'else if(navigator.clipboard){navigator.clipboard.writeText(u).then(function(){var t=$("#toast");t.textContent="Link copied";t.classList.add("on");setTimeout(function(){t.classList.remove("on")},1800)})}});'
-      + 'document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest("a.b")&&navigator.vibrate)navigator.vibrate(10)});';
+      + 'document.addEventListener("click",function(e){if(e.target.closest&&e.target.closest(".b")&&navigator.vibrate)navigator.vibrate(10)});';
     if (p.tilt && p.avatar) ux += '(function(){var im=$(".hero img");if(!im||matchMedia("(prefers-reduced-motion: reduce)").matches)return;'
       + 'im.style.scale="1.08";var raf=0,tx=0,ty=0;function ap(){raf=0;im.style.translate=tx+"px "+ty+"px"}'
       + 'function set(x,y){tx=Math.max(-8,Math.min(8,x));ty=Math.max(-8,Math.min(8,y));if(!raf)raf=requestAnimationFrame(ap)}'
@@ -172,28 +229,41 @@ main.nophoto .info{margin-top:0}
 h1{margin:0 0 4px;font-size:1.5rem;font-weight:${HW[fk]};letter-spacing:${fk === 'display' ? '-.02em' : '0'};text-shadow:0 1px 14px ${t.bg}}
 .role{font-weight:600;opacity:.9;margin-bottom:6px;text-shadow:0 1px 14px ${t.bg}}
 p{opacity:.85;margin:0;text-shadow:0 1px 14px ${t.bg}}
-a{position:relative;display:block;padding:14px 48px;margin:10px 0;border-radius:14px;color:${t.fg};text-decoration:none;font-weight:600}
-a.b{${btnCss};transition:transform .15s}
-a.save{background:${accent};color:${ink(accent)};border-color:transparent}
-a svg{position:absolute;left:16px;top:50%;width:22px;height:22px;margin-top:-11px}
-a.b:hover{transform:scale(1.02)}
-a.b:active{transform:scale(.98)}
+.b{position:relative;display:block;width:100%;padding:14px 48px;margin:10px 0;border-radius:14px;color:${t.fg};text-decoration:none;font:inherit;font-weight:600;text-align:center;cursor:pointer;-webkit-appearance:none;appearance:none}
+.b{${btnCss};transition:transform .15s}
+.save{background:${accent};color:${ink(accent)};border-color:transparent}
+.b svg{position:absolute;left:16px;top:50%;width:22px;height:22px;margin-top:-11px}
+.b .ic{position:absolute;left:14px;top:50%;width:26px;height:26px;margin-top:-13px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font:700 14px system-ui,sans-serif;object-fit:contain}
+.b img.ic{background:#fff;padding:2px}
+.b .ic svg{position:static;width:16px;height:16px;margin:0}
+.b:hover{transform:scale(1.02)}
+.b:active{transform:scale(.98)}
 .share{position:fixed;top:max(12px,env(safe-area-inset-top));right:12px;z-index:5;width:40px;height:40px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.35);color:#fff;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .share svg{width:20px;height:20px}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:6;background:rgba(0,0,0,.82);color:#fff;padding:10px 16px;border-radius:999px;font:600 14px system-ui,sans-serif;opacity:0;transition:opacity .25s;pointer-events:none}
 .toast.on{opacity:1}
 .motion{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:6;padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.3);background:rgba(0,0,0,.55);color:#fff;font:600 13px system-ui,sans-serif}
+.pm{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.pm[hidden]{display:none}
+.pmc{background:${t.card};color:${t.fg};border-radius:18px;width:100%;max-width:380px;max-height:92vh;overflow:auto;padding:18px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.pmc h2{margin:0 0 12px;font-size:1.15rem}
+.pmc .qr{display:block;width:100%;max-width:280px;margin:0 auto 10px;background:#fff;border-radius:12px;padding:8px}
+.pmc .hint{opacity:.75;font-size:.9rem;margin:6px 0}
+.pmc .acct{margin:10px 0 2px;font-weight:600}
+.pmc .num{font-size:1.25rem;font-weight:700;letter-spacing:.04em;margin:2px 0 6px;overflow-wrap:anywhere}
+.pmc button,.pmc .pb{display:block;width:100%;margin:8px 0;padding:12px;border-radius:12px;border:1px solid ${accent}66;background:transparent;color:${t.fg};font:inherit;font-weight:600;text-decoration:none;cursor:pointer}
+.pmc .pbp{background:${accent};color:${ink(accent)};border-color:transparent}
 @keyframes slidein{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:none}}
 @keyframes fadeup{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-.js:not(.go) a.b,.js:not(.go) .info{opacity:0}
+.js:not(.go) .b,.js:not(.go) .info{opacity:0}
 .go .info{animation:fadeup .6s ease-out backwards}
-.go a.b{animation:slidein .55s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--i)*120ms + .25s)}
-@media (prefers-reduced-motion:reduce){.js:not(.go) a.b,.js:not(.go) .info{opacity:1}.go a.b,.go .info{animation:none}}
+.go .b{animation:slidein .55s cubic-bezier(.22,1,.36,1) backwards;animation-delay:calc(var(--i)*120ms + .25s)}
+@media (prefers-reduced-motion:reduce){.js:not(.go) .b,.js:not(.go) .info{opacity:1}.go .b,.go .info{animation:none}}
 </style></head><body><main class="${p.avatar ? '' : 'nophoto'}">
 ${hero}
 <div class="info">${logo}<h1>${esc(p.name)}</h1>${role}<p>${esc(p.bio)}</p></div>
 ${save}${links}
-</main><button class="share" type="button" aria-label="Share">${svg('share')}</button><div class="toast" id="toast"></div>${saveJs}${uxJs}${goJs}</body></html>`;
+</main><button class="share" type="button" aria-label="Share">${svg('share')}</button><div class="toast" id="toast"></div>${payHtml}${saveJs}${uxJs}${goJs}</body></html>`;
   }
 
   const api = { render, vcard, hasContact, iconFor, svg };
