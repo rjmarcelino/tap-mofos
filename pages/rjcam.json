@@ -13,23 +13,35 @@
   "btnStyle": "solid",
   "tilt": false,
   "theme": "dark",
-  "site": "https://262f7c47-tap-mofos.marcelinozxc31.workers.dev",
+  "site": "https://tap-mofos.tapbros.workers.dev",
   "links": [
+    {
+      "label": "Save 09166828617",
+      "url": "tel:09166828617"
+    },
+    {
+      "type": "pay",
+      "label": "Pay with Gcash",
+      "provider": "gcash",
+      "qr": "images/rjcam-payqr-1-mvejyjsj.png"
+    },
+    {
+      "type": "pay",
+      "label": "Pay with Maribank",
+      "provider": "maribank",
+      "qr": "images/rjcam-payqr-2-mvejyjta.png"
+    },
     {
       "label": "Add me on Facebook",
       "url": "https://www.facebook.com/rjcam031"
-    },
-    {
-      "label": "Hit me up on Insta",
-      "url": "https://instagram.com/rmmlmrcln"
     },
     {
       "label": "Watch me Stream on Tiktok",
       "url": "https://tiktok.com/@daxdotes"
     },
     {
-      "label": "Save 09166828617",
-      "url": "tel:09166828617"
+      "label": "Hit me up on Insta",
+      "url": "https://instagram.com/rmmlmrcln"
     }
   ]
 }
