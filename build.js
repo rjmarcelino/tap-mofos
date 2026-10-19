@@ -18,7 +18,8 @@ for (const f of fs.readdirSync('pages').filter(f => f.endsWith('.json'))) {
     fs.mkdirSync(`${out}/p/${slug}`, { recursive: true });
     fs.writeFileSync(`${out}/p/${slug}/index.html`, render(SITE ? { ...data, site: SITE } : data, { slug }));
     if (hasContact(data)) fs.writeFileSync(`${out}/p/${slug}/contact.vcf`, vcard(data));
-    manifest.push({ slug, name: data.name || slug, avatar: data.avatar || '', logo: data.logo || '', accent: data.accent || '', links: (data.links || []).length });
+    manifest.push({ slug, name: data.name || slug, avatar: data.avatar || '', logo: data.logo || '', accent: data.accent || '', links: (data.links || []).length,
+      imgs: [data.avatar, data.logo, ...(data.links || []).flatMap(l => [l && l.qr, l && l.logo])].filter(Boolean) });
   } catch (e) {
     console.warn(`Skipped ${f}: ${e.message}`);
   }
