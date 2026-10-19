@@ -77,11 +77,21 @@ input[type=color]{width:64px;height:40px;padding:2px}
 .tpl button{width:auto;margin:6px 0;padding:8px 12px;font-size:14px}
 .danger{color:#b3261e;border-color:#b3261e}
 [data-theme=dark] .danger{color:#ff8a80;border-color:#ff8a80}
+.fl{display:block;margin:8px 0 0;font-weight:400;font-size:14px}
+.fl input{margin-top:2px}
 .grip{cursor:grab;user-select:none;opacity:.6;font-size:18px}
 .rb{display:flex;gap:4px}
 #toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;gap:8px;z-index:50}
 .toast{background:#222;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.3);max-width:340px;font-size:14px;transition:opacity .4s}
 .toast.ok{background:#1a7f4b}.toast.err{background:#b3261e}.toast.out{opacity:0}
+
+/* bulk create */
+#bulk{max-width:760px}
+#bulkprog{width:100%;margin-top:8px}
+.bt{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+.bt th,.bt td{border-bottom:1px solid var(--line2);padding:6px 8px;text-align:left;vertical-align:top}
+.st-ok{color:#1a7f4b}.st-warn{color:#b26a00}.st-bad{color:#b3261e}
+[data-theme=dark] .st-ok{color:#5dd39e}[data-theme=dark] .st-warn{color:#ffc266}[data-theme=dark] .st-bad{color:#ff8a80}
 
 /* desktop: dashboard | editor | preview */
 @media(min-width:960px){
@@ -102,6 +112,7 @@ input[type=color]{width:64px;height:40px;padding:2px}
   <label class="sw"><input type="checkbox" id="dark"><span class="track"></span><span>Dark mode</span></label>
   <nav class="tabs">
     <button id="tab-editor" type="button" class="on">Editor</button>
+    <button id="tab-bulk" type="button">Bulk create</button>
     <button id="tab-settings" type="button">Settings</button>
   </nav>
   </div>
@@ -156,6 +167,7 @@ input[type=color]{width:64px;height:40px;padding:2px}
         <div id="links"></div>
         <button id="add" type="button">+ Add link</button>
         <button id="addphone" type="button">+ Add phone number</button>
+        <button id="addpay" type="button">+ Add payment (GCash, Maya, bank, QR)</button>
         <small>A "Save contact" button appears on the page when it has a phone number or an email link (mailto:you@example.com).</small>
 
         <button id="save" type="button">Save page</button>
@@ -163,6 +175,31 @@ input[type=color]{width:64px;height:40px;padding:2px}
         <p id="msg"></p>
       </div>
       <aside id="pvbox"><b>Live preview</b><iframe id="pv" title="Live preview"></iframe></aside>
+    </section>
+
+    <section id="p-bulk" hidden>
+      <div id="bulk">
+        <h3>Bulk create from a spreadsheet</h3>
+        <small>Make many cards at once. Everything is saved in a single commit, so the site rebuilds only once.</small>
+        <label>1. Get the template</label>
+        <button id="bulktpl" type="button">Download CSV template</button>
+        <small>Fill it in with Excel or Google Sheets and save as CSV. One row per card. Only <b>name</b> is required. Social columns accept a handle (janedoe) or a full link.</small>
+        <label for="bulkcsv">2. Your CSV file</label>
+        <input id="bulkcsv" type="file" accept=".csv,text/csv">
+        <label for="bulkimgs">3. Photos and logos (optional)</label>
+        <input id="bulkimgs" type="file" accept="image/*" multiple>
+        <small>Select all the images at once. Each is matched by file name to the <b>photo</b> or <b>logo</b> column, or to the slug (jane.jpg for slug jane).</small>
+        <label for="bulkshared">Same company logo on every card (optional)</label>
+        <input id="bulkshared" type="file" accept="image/*">
+        <label>If a slug already exists</label>
+        <label class="chk"><input type="radio" name="bulkmode" value="skip" checked> Skip it</label>
+        <label class="chk"><input type="radio" name="bulkmode" value="replace"> Replace it (the page is rebuilt from the CSV only)</label>
+        <button id="bulkreview" type="button">4. Review</button>
+        <div id="bulkout"></div>
+        <button id="bulkgo" type="button" hidden>Import</button>
+        <progress id="bulkprog" max="100" value="0" hidden></progress>
+        <p id="bulkmsg"></p>
+      </div>
     </section>
 
     <section id="p-settings" hidden>
@@ -205,12 +242,13 @@ $('dark').onchange = () => {
 
 // ---- tabs + settings ----
 function showTab(name) {
-  $('p-editor').hidden = name !== 'editor';
-  $('p-settings').hidden = name !== 'settings';
-  $('tab-editor').classList.toggle('on', name === 'editor');
-  $('tab-settings').classList.toggle('on', name === 'settings');
+  ['editor', 'bulk', 'settings'].forEach(t => {
+    $('p-' + t).hidden = name !== t;
+    $('tab-' + t).classList.toggle('on', name === t);
+  });
 }
 $('tab-editor').onclick = () => showTab('editor');
+$('tab-bulk').onclick = () => showTab('bulk');
 $('tab-settings').onclick = () => showTab('settings');
 if (!$('owner').value || !$('repo').value || !$('token').value) showTab('settings');
 
@@ -243,16 +281,32 @@ const telUrl = v => { const n = v.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '')
 
 // ---- form data + live preview ----
 const list = $('links');
-function getLinks() {
-  return [...list.children].map(r => ({
-    label: r.querySelector('.lbl').value.trim(),
-    url: r.dataset.type === 'phone' ? telUrl(r.querySelector('.url').value) : fixUrl(r.querySelector('.url').value.trim())
-  })).filter(l => l.label && l.url);
+function getLinks(save) {
+  return [...list.children].map(r => {
+    const label = r.querySelector('.lbl').value.trim();
+    if (r.dataset.type === 'pay') {
+      const g = c => r.querySelector(c).value.trim();
+      const qr = save ? (r._newQr || r.dataset.qr || '') : (r._qrUrl || r.dataset.qr || '');
+      const logo = save ? (r._newLg || r.dataset.plogo || '') : (r._lgUrl || r.dataset.plogo || '');
+      const url = g('.payurl') ? fixUrl(g('.payurl')) : '';
+      if (!qr && !g('.acnum') && !url && !g('.paynote')) return null;
+      const o = { type: 'pay', label, provider: g('.prov') };
+      if (g('.acn')) o.name = g('.acn');
+      if (g('.acnum')) o.number = g('.acnum');
+      if (qr) o.qr = qr;
+      if (logo) o.logo = logo;
+      if (url) o.url = url;
+      if (g('.paynote')) o.note = g('.paynote');
+      return o;
+    }
+    const url = r.dataset.type === 'phone' ? telUrl(r.querySelector('.url').value) : fixUrl(r.querySelector('.url').value.trim());
+    return label && url ? { label, url } : null;
+  }).filter(Boolean);
 }
-const collect = (avatar, logo) => ({
+const collect = (avatar, logo, save) => ({
   name: $('name').value, title: $('title').value.trim(), company: $('company').value.trim(), bio: $('bio').value,
   avatar, photoZoom: +$('zoom').value, photoX: Math.round(pos.x), photoY: Math.round(pos.y), logo, accent: $('useaccent').checked ? $('accent').value : '', font: $('font').value, btnStyle: $('btnstyle').value, tilt: $('tilt').checked,
-  theme: $('theme').value, site: siteBase(), links: getLinks()
+  theme: $('theme').value, site: siteBase(), links: getLinks(save)
 });
 let photo = null, photoUrl = '', timer, existingAvatar = '', editingSlug = '', pos = { x: 50, y: 50 };
 let logoFile = null, logoUrl = '', existingLogo = '', dirty = false, dragRow = null;
@@ -348,15 +402,31 @@ function renumber() {
 function addRow(type) {
   const d = document.createElement('div');
   d.className = 'row';
-  d.dataset.type = type === 'phone' ? 'phone' : 'link';
+  d.dataset.type = type === 'phone' ? 'phone' : type === 'pay' ? 'pay' : 'link';
   d.innerHTML = `<div class="top"><span class="lh"><span class="grip" title="Drag to reorder">⠿</span><i class="ico"></i><b class="n"></b></span><span class="rb"><button type="button" class="up" title="Move up">↑</button><button type="button" class="dn" title="Move down">↓</button><button type="button" class="rm">Remove</button></span></div>
-    <input class="lbl" placeholder="Button text (e.g. Instagram)">
-    ${type === 'phone'
+    <input class="lbl" placeholder="${type === 'pay' ? 'Button text (e.g. Pay with GCash)' : 'Button text (e.g. Instagram)'}">
+    ${type === 'pay'
+      ? `<select class="prov"><option value="gcash">GCash</option><option value="maya">Maya</option><option value="maribank">MariBank</option><option value="gotyme">GoTyme</option><option value="bdo">BDO</option><option value="bpi">BPI</option><option value="unionbank">UnionBank</option><option value="metrobank">Metrobank</option><option value="paypal">PayPal</option><option value="bank">Other bank transfer</option><option value="ewallet">Other e-wallet</option></select>
+         <input class="acn" placeholder="Account name (optional)">
+         <input class="acnum" placeholder="Account or mobile number (optional)">
+         <label class="fl">QR code image <input class="qrf" type="file" accept="image/*"></label>
+         <small class="qrs"></small>
+         <label class="fl">Custom logo for the button (optional) <input class="lgf" type="file" accept="image/*"></label>
+         <input class="payurl" type="url" placeholder="Payment link (optional, https://...)">
+         <input class="paynote" placeholder="Note shown in the pop-up (optional)">`
+      : type === 'phone'
       ? '<input class="url" type="tel" inputmode="tel" placeholder="Phone number (e.g. +63 912 345 6789)">'
       : '<input class="url" type="url" inputmode="url" placeholder="URL (e.g. https://instagram.com/yourname)">'}`;
   const ico = d.querySelector('.ico'), urlBox = d.querySelector('.url');
-  urlBox.oninput = () => { ico.innerHTML = window.Cards ? (d.dataset.type === 'phone' ? Cards.svg('phone') : Cards.svg(Cards.iconFor(urlBox.value))) : ''; };
-  urlBox.oninput();
+  if (urlBox) {
+    urlBox.oninput = () => { ico.innerHTML = window.Cards ? (d.dataset.type === 'phone' ? Cards.svg('phone') : Cards.svg(Cards.iconFor(urlBox.value))) : ''; };
+    urlBox.oninput();
+  } else if (window.Cards) {
+    ico.innerHTML = Cards.svg('wallet');
+    d.querySelector('.qrf').onchange = e => { d._qr = e.target.files[0] || null; d._qrUrl = d._qr ? URL.createObjectURL(d._qr) : ''; updatePayRow(d); preview(); };
+    d.querySelector('.lgf').onchange = e => { d._lg = e.target.files[0] || null; d._lgUrl = d._lg ? URL.createObjectURL(d._lg) : ''; preview(); };
+    updatePayRow(d);
+  }
   d.querySelector('.rm').onclick = () => { d.remove(); renumber(); preview(); markDirty(); };
   d.querySelector('.up').onclick = () => { if (d.previousElementSibling) { list.insertBefore(d, d.previousElementSibling); renumber(); preview(); markDirty(); } };
   d.querySelector('.dn').onclick = () => { if (d.nextElementSibling) { list.insertBefore(d.nextElementSibling, d); renumber(); preview(); markDirty(); } };
@@ -372,6 +442,11 @@ function addRow(type) {
 }
 $('add').onclick = () => addRow();
 $('addphone').onclick = () => addRow('phone');
+$('addpay').onclick = () => addRow('pay');
+function updatePayRow(r) {
+  const t = r.querySelector('.qrs');
+  if (t) t.textContent = r._qr ? 'New QR selected.' : r.dataset.qr ? 'A QR is saved for this button. Choose a file to replace it.' : 'No QR yet. You can also just add an account number.';
+}
 addRow();
 
 // ---- photo position ----
@@ -429,6 +504,16 @@ function fillForm(j, slug, asEdit) {
   $('useaccent').checked = !!j.accent; $('accent').value = j.accent || '#0a84ff'; $('tilt').checked = !!j.tilt;
   list.replaceChildren();
   (j.links || []).forEach(l => {
+    if (l.type === 'pay') {
+      const row = addRow('pay');
+      row.querySelector('.lbl').value = l.label || '';
+      row.querySelector('.prov').value = l.provider || 'ewallet';
+      row.querySelector('.acn').value = l.name || ''; row.querySelector('.acnum').value = l.number || '';
+      row.querySelector('.payurl').value = l.url || ''; row.querySelector('.paynote').value = l.note || '';
+      row.dataset.qr = l.qr || ''; row.dataset.plogo = l.logo || '';
+      updatePayRow(row);
+      return;
+    }
     const phone = /^tel:/i.test(l.url || '');
     const row = addRow(phone ? 'phone' : 'link');
     row.querySelector('.lbl').value = l.label || '';
@@ -469,7 +554,7 @@ $('photo').onchange = e => {
   photoUrl = photo ? URL.createObjectURL(photo) : '';
   refreshAdjuster();
 };
-function encode(file, maxDim, alpha) {
+function encode(file, maxDim, alpha, png) {
   return new Promise((ok, bad) => {
     const img = new Image();
     img.onload = () => {
@@ -479,8 +564,8 @@ function encode(file, maxDim, alpha) {
       const x = c.getContext('2d');
       if (!alpha) { x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); }
       x.drawImage(img, 0, 0, c.width, c.height);
-      let url = c.toDataURL('image/webp', 0.85), ext = 'webp';
-      if (!url.startsWith('data:image/webp')) {
+      let url = png ? c.toDataURL('image/png') : c.toDataURL('image/webp', 0.85), ext = png ? 'png' : 'webp';
+      if (!png && !url.startsWith('data:image/webp')) {
         if (alpha) { url = c.toDataURL('image/png'); ext = 'png'; } else { url = c.toDataURL('image/jpeg', 0.85); ext = 'jpg'; }
       }
       ok({ b64: url.split(',')[1], ext });
@@ -561,8 +646,29 @@ $('save').onclick = async () => {
       logo = `images/${slug}-logo-${Date.now().toString(36)}.${up.ext}`;
       files.push({ path: logo, b64: up.b64 });
     }
-    files.push({ path: `pages/${slug}.json`, text: JSON.stringify(collect(avatar, logo), null, 2), sha });
+    let pn = 0;
+    for (const r of list.children) {
+      if (r.dataset.type !== 'pay') continue;
+      pn++;
+      if (r._qr) {
+        const up = await encode(r._qr, 900, false, true);   // lossless PNG keeps QR codes scannable
+        r._newQr = `images/${slug}-payqr-${pn}-${Date.now().toString(36)}.${up.ext}`;
+        files.push({ path: r._newQr, b64: up.b64 });
+      }
+      if (r._lg) {
+        const up = await encode(r._lg, 200, true);
+        r._newLg = `images/${slug}-paylogo-${pn}-${Date.now().toString(36)}.${up.ext}`;
+        files.push({ path: r._newLg, b64: up.b64 });
+      }
+    }
+    files.push({ path: `pages/${slug}.json`, text: JSON.stringify(collect(avatar, logo, true), null, 2), sha });
     const mode = await commitFiles(owner, repo, files, 'Save page ' + slug);
+    for (const r of list.children) {
+      if (r.dataset.type !== 'pay') continue;
+      if (r._newQr) { r.dataset.qr = r._newQr; r._newQr = ''; r._qr = null; }
+      if (r._newLg) { r.dataset.plogo = r._newLg; r._newLg = ''; r._lg = null; }
+      updatePayRow(r);
+    }
     msg.textContent = `Saved! Live in about a minute: ${siteBase()}/p/${slug}/` + (mode === 'many' ? ' (saved as several commits)' : '');
     editingSlug = slug; existingAvatar = avatar; existingLogo = logo; photo = null; logoFile = null; dirty = false; clearDraft(); updateBar();
     toast('Saved! Live in about a minute.', 'ok');
@@ -598,8 +704,8 @@ async function deletePage(slug, card) {
     const paths = ['pages/' + slug + '.json'];
     let others = null;
     try { others = (await (await fetch('../pages.json', { cache: 'no-store' })).json()).filter(x => x.slug !== slug); } catch (e) {}
-    const used = new Set((others || []).flatMap(x => [x.avatar, x.logo]));
-    [data.avatar, data.logo].forEach(p => { if (others && p && /^images\//.test(p) && !p.includes('..') && !used.has(p)) paths.push(p); });
+    const used = new Set((others || []).flatMap(x => x.imgs || [x.avatar, x.logo]));
+    [data.avatar, data.logo, ...(data.links || []).flatMap(l => [l && l.qr, l && l.logo])].forEach(p => { if (others && p && /^images\//.test(p) && !p.includes('..') && !used.has(p)) paths.push(p); });
 
     let both = true;
     try {
@@ -632,6 +738,239 @@ async function deletePage(slug, card) {
 }
 $('deletepage').onclick = () => deletePage(editingSlug, null);
 
+// <bulk-core>
+const BULK_COLS = ['slug', 'name', 'title', 'company', 'bio', 'theme', 'font', 'buttons', 'accent', 'tilt', 'phone', 'email', 'website',
+  'instagram', 'facebook', 'tiktok', 'youtube', 'linkedin', 'x', 'link1_label', 'link1_url', 'link2_label', 'link2_url', 'photo', 'logo'];
+const normKey = h => String(h).toLowerCase().replace(/[\s_\-]/g, '');
+const slugify = s => String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+const socialUrl = (v, base) => {
+  v = (v || '').trim();
+  if (!v) return '';
+  if (/^https?:\/\//i.test(v) || /^[\w-]+(\.[\w-]+)+\//.test(v)) return fixUrl(v);
+  return base + v.replace(/^@/, '');
+};
+
+function parseCsv(text) {
+  text = String(text).replace(/^\uFEFF/, '');
+  const first = text.split(/\r?\n/)[0] || '';
+  const d = (first.match(/;/g) || []).length > (first.match(/,/g) || []).length ? ';' : ',';
+  const rows = []; let row = [], cur = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === d) { row.push(cur); cur = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += c;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  if (!rows.length) return [];
+  const head = rows.shift().map(normKey);
+  return rows.filter(r => r.some(x => x.trim())).map(r => Object.fromEntries(head.map((h, i) => [h, (r[i] || '').trim()])));
+}
+
+function buildPlan(rows, o) {
+  const seen = new Set();
+  const pick = (v, list, d) => list.includes(String(v || '').trim().toLowerCase()) ? String(v).trim().toLowerCase() : d;
+  return rows.map((r, i) => {
+    const name = (r.name || '').trim();
+    const slug = slugify(r.slug || name);
+    const item = { n: i + 2, slug, name, error: '', action: 'create', page: null, photoFile: null, logoFile: null, notes: [] };
+    if (!name) item.error = 'Missing name';
+    else if (!slug) item.error = 'Could not make a slug';
+    else if (seen.has(slug)) item.error = 'Duplicate slug in the CSV';
+    if (slug) seen.add(slug);
+    if (item.error) return item;
+    if (o.existing.has(slug)) item.action = o.mode === 'replace' ? 'replace' : 'skip';
+
+    const links = [];
+    const add = (label, url) => { if (url) links.push({ label, url }); };
+    if (r.phone) { const t = telUrl(r.phone); if (t) add('Call me', t); else item.notes.push('phone looks too short'); }
+    if (r.email) { const e = r.email.replace(/^mailto:/i, '').trim(); if (e.includes('@')) add('Email me', 'mailto:' + e); else item.notes.push('email looks wrong'); }
+    if (r.website) add('Website', fixUrl(r.website.trim()));
+    add('Instagram', socialUrl(r.instagram, 'https://instagram.com/'));
+    add('Facebook', socialUrl(r.facebook, 'https://facebook.com/'));
+    add('TikTok', socialUrl(r.tiktok, 'https://tiktok.com/@'));
+    add('YouTube', socialUrl(r.youtube, 'https://youtube.com/@'));
+    add('LinkedIn', socialUrl(r.linkedin, 'https://linkedin.com/in/'));
+    add('X', socialUrl(r.x, 'https://x.com/'));
+    for (const n of [1, 2]) {
+      const l = (r['link' + n + 'label'] || '').trim(), u = (r['link' + n + 'url'] || '').trim();
+      if (l && u) add(l, fixUrl(u)); else if (l || u) item.notes.push('link' + n + ' needs a label and a URL');
+    }
+    const acc = (r.accent || '').trim();
+    if (acc && !/^#[0-9a-f]{6}$/i.test(acc)) item.notes.push('accent must look like #0a84ff');
+    item.page = {
+      name, title: (r.title || '').trim(), company: (r.company || '').trim(), bio: (r.bio || '').trim(),
+      avatar: '', photoZoom: 1, photoX: 50, photoY: 50, logo: '',
+      accent: /^#[0-9a-f]{6}$/i.test(acc) ? acc : '',
+      font: pick(r.font, ['modern', 'serif', 'display', 'rounded', 'mono'], 'modern'),
+      btnStyle: pick(r.buttons || r.btnstyle, ['solid', 'outline', 'glass', 'soft'], 'solid'),
+      tilt: /^(1|y|yes|true|on)$/i.test((r.tilt || '').trim()),
+      theme: pick(r.theme, ['dark', 'light', 'ocean'], 'dark'),
+      site: o.site || '', links
+    };
+    const pf = (r.photo || '').trim(), lf = (r.logo || '').trim();
+    item.photoFile = o.find(pf || slug);
+    if (pf && !item.photoFile) item.notes.push('photo "' + pf + '" not found');
+    item.logoFile = lf ? o.find(lf) : (o.shared || null);
+    if (lf && !item.logoFile) item.notes.push('logo "' + lf + '" not found');
+    return item;
+  });
+}
+
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+async function bulkCommit(owner, repo, token, files, message, onProgress, wait = sleepMs) {
+  const base = `https://api.github.com/repos/${owner}/${repo}`;
+  const H = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' };
+  const J = { ...H, 'Content-Type': 'application/json' };
+  const call = async (url, method, body) => {
+    for (let t = 0; ; t++) {
+      const r = await fetch(url, method === 'GET' ? { headers: H } : { method, headers: J, body: JSON.stringify(body) });
+      if (r.ok) return r.json();
+      const text = await r.text();
+      const ra = r.headers && r.headers.get ? r.headers.get('retry-after') : null;
+      if ((r.status === 403 || r.status === 429) && (ra || /rate limit|abuse/i.test(text)) && t < 6) {
+        const s = Math.min(120, +ra || 30 * (t + 1));
+        onProgress('GitHub asked us to slow down. Waiting ' + s + 's...');
+        await wait(s * 1000);
+        continue;
+      }
+      throw new Error(url.split('/').slice(-2).join('/') + ' ' + r.status + ': ' + text.slice(0, 140));
+    }
+  };
+  const branch = (await call(base, 'GET')).default_branch;
+  const parentSha = (await call(`${base}/git/ref/heads/${branch}`, 'GET')).object.sha;
+  const parent = await call(`${base}/git/commits/${parentSha}`, 'GET');
+  const total = files.filter(f => f.b64).length; let done = 0;
+  const entries = [];
+  for (const f of files) {
+    if (f.b64) {
+      const b = await call(`${base}/git/blobs`, 'POST', { content: f.b64, encoding: 'base64' });
+      entries.push({ path: f.path, mode: '100644', type: 'blob', sha: b.sha });
+      done++; onProgress(`Uploading images ${done}/${total}`, done / Math.max(total, 1));
+      await wait(800); // stay under GitHub's content-creation limit
+    } else entries.push({ path: f.path, mode: '100644', type: 'blob', content: f.text });
+  }
+  onProgress('Creating the commit...', 1);
+  const tree = await call(`${base}/git/trees`, 'POST', { base_tree: parent.tree.sha, tree: entries });
+  const commit = await call(`${base}/git/commits`, 'POST', { message, tree: tree.sha, parents: [parentSha] });
+  await call(`${base}/git/refs/heads/${branch}`, 'PATCH', { sha: commit.sha });
+}
+// </bulk-core>
+
+// ---- bulk create: screens ----
+let bulkPlan = [];
+const csvEsc = v => /[",\n]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+$('bulktpl').onclick = () => {
+  const ex = [
+    { slug: 'jane', name: 'Jane Doe', title: 'Marketing Lead', company: 'Acme Inc', bio: 'Helping brands grow', theme: 'dark', font: 'modern', buttons: 'glass', accent: '#0a84ff', tilt: 'yes', phone: '+63 912 345 6789', email: 'jane@acme.com', website: 'https://acme.com', instagram: 'janedoe', facebook: 'janedoe', linkedin: 'jane-doe', link1_label: 'Book a call', link1_url: 'https://cal.com/jane', photo: 'jane.jpg' },
+    { slug: 'mark', name: 'Mark Cruz', title: 'Sales Manager', company: 'Acme Inc', theme: 'light', font: 'serif', buttons: 'solid', tilt: 'no', phone: '+63 998 765 4321', email: 'mark@acme.com', tiktok: 'markcruz', photo: 'mark.png' }
+  ];
+  const text = '\uFEFF' + BULK_COLS.join(',') + '\n' + ex.map(r => BULK_COLS.map(c => csvEsc(r[c] || '')).join(',')).join('\n') + '\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'cards-template.csv'; a.click();
+};
+
+async function existingSlugs() {
+  const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
+  const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/pages`,
+    { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' }, cache: 'no-store' });
+  if (r.status === 404) return new Set();
+  if (!r.ok) throw new Error('Could not read your repo (' + r.status + '). Check Settings and press Test connection.');
+  return new Set((await r.json()).filter(f => /\.json$/.test(f.name)).map(f => f.name.replace(/\.json$/, '')));
+}
+
+function renderPlan() {
+  const out = $('bulkout'); out.replaceChildren();
+  const t = document.createElement('table'); t.className = 'bt';
+  const hr = t.insertRow();
+  ['#', 'Slug', 'Name', 'Photo', 'Buttons', 'Status'].forEach(h => { const th = document.createElement('th'); th.textContent = h; hr.appendChild(th); });
+  const counts = { create: 0, replace: 0, skip: 0, error: 0 };
+  bulkPlan.forEach(p => {
+    const row = t.insertRow();
+    const cell = (txt, cls) => { const c = row.insertCell(); c.textContent = txt; if (cls) c.className = cls; return c; };
+    cell(p.n); cell(p.slug || '-'); cell(p.name || '-');
+    cell(p.error ? '' : p.photoFile ? 'yes' : 'none', p.error ? '' : p.photoFile ? 'st-ok' : 'st-warn');
+    cell(p.page ? p.page.links.length : '');
+    let st, cls;
+    if (p.error) { st = p.error; cls = 'st-bad'; counts.error++; }
+    else if (p.action === 'skip') { st = 'Exists, will skip'; cls = 'st-warn'; counts.skip++; }
+    else if (p.action === 'replace') { st = 'Exists, will replace'; cls = 'st-warn'; counts.replace++; }
+    else { st = 'New'; cls = 'st-ok'; counts.create++; }
+    if (p.notes.length) st += ' (' + p.notes.join('; ') + ')';
+    cell(st, cls);
+  });
+  out.appendChild(t);
+  const sum = document.createElement('p');
+  sum.textContent = `${counts.create} new, ${counts.replace} to replace, ${counts.skip} skipped, ${counts.error} with errors.`;
+  out.appendChild(sum);
+  const n = counts.create + counts.replace;
+  $('bulkgo').hidden = !n;
+  $('bulkgo').textContent = 'Import ' + n + ' card' + (n === 1 ? '' : 's');
+}
+
+$('bulkreview').onclick = async () => {
+  const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
+  if (!owner || !repo || !token) { showTab('settings'); $('connmsg').textContent = 'Enter your GitHub username, repo and token here, then go back to Bulk create.'; return; }
+  const f = $('bulkcsv').files[0];
+  if (!f) { toast('Choose your CSV file first.', 'err'); return; }
+  try {
+    const rows = parseCsv(await f.text());
+    if (!rows.length) throw new Error('That CSV has no rows.');
+    const map = new Map();
+    for (const im of $('bulkimgs').files) {
+      const k = im.name.toLowerCase(); map.set(k, im);
+      const b = k.replace(/\.[^.]+$/, ''); if (!map.has(b)) map.set(b, im);
+    }
+    const find = n => { const k = String(n || '').toLowerCase(); return map.get(k) || map.get(k.replace(/\.[^.]+$/, '')) || null; };
+    const mode = document.querySelector('input[name=bulkmode]:checked').value;
+    bulkPlan = buildPlan(rows, { existing: await existingSlugs(), mode, find, site: siteBase(), shared: $('bulkshared').files[0] || null });
+    renderPlan();
+    $('bulkmsg').textContent = '';
+  } catch (e) { toast(e.message, 'err'); $('bulkmsg').textContent = e.message; }
+};
+
+$('bulkgo').onclick = async () => {
+  const owner = $('owner').value.trim(), repo = $('repo').value.trim(), token = $('token').value.trim();
+  const todo = bulkPlan.filter(p => !p.error && p.action !== 'skip');
+  if (!todo.length) return;
+  const ui = (text, frac) => { $('bulkmsg').textContent = text; if (frac != null) $('bulkprog').value = Math.round(frac * 100); };
+  $('bulkprog').hidden = false; $('bulkprog').value = 0;
+  ['bulkgo', 'bulkreview'].forEach(i => $(i).disabled = true);
+  try {
+    const files = [], logoPaths = new Map();
+    const ts = Date.now().toString(36);
+    let k = 0;
+    for (const p of todo) {
+      ui(`Preparing images ${++k}/${todo.length}...`, k / todo.length);
+      if (p.photoFile) {
+        const up = await encode(p.photoFile, 1000, false);
+        p.page.avatar = `images/${p.slug}-${ts}.${up.ext}`;
+        files.push({ path: p.page.avatar, b64: up.b64 });
+      }
+      if (p.logoFile) {
+        if (!logoPaths.has(p.logoFile)) {
+          const up = await encode(p.logoFile, 600, true);
+          const path = `images/logo-${ts}-${logoPaths.size + 1}.${up.ext}`;
+          logoPaths.set(p.logoFile, path); files.push({ path, b64: up.b64 });
+        }
+        p.page.logo = logoPaths.get(p.logoFile);
+      }
+      files.push({ path: `pages/${p.slug}.json`, text: JSON.stringify(p.page, null, 2) });
+    }
+    await bulkCommit(owner, repo, token, files, `Bulk create ${todo.length} cards`, ui);
+    const made = todo.filter(p => p.action === 'create').length, rep = todo.length - made;
+    ui(`Done! ${made} created${rep ? ', ' + rep + ' replaced' : ''}. The site will be live in about a minute.`, 1);
+    toast(`Imported ${todo.length} cards in one commit`, 'ok');
+    bulkPlan = []; $('bulkout').replaceChildren(); $('bulkgo').hidden = true;
+    setTimeout(loadStats, 75000);
+  } catch (e) { ui('Import stopped: ' + e.message); toast('Import failed: ' + e.message, 'err'); }
+  finally { ['bulkgo', 'bulkreview'].forEach(i => $(i).disabled = false); }
+};
+
 // ---- toasts, drafts, shortcuts, templates ----
 function toast(text, kind) {
   const t = document.createElement('div');
@@ -646,7 +985,7 @@ function markDirty() { dirty = true; saveDraftSoon(); }
 function saveDraftSoon() {
   clearTimeout(draftTimer);
   draftTimer = setTimeout(() => {
-    try { if (dirty) localStorage.setItem(DRAFT, JSON.stringify({ slug: $('slug').value, editing: editingSlug, data: collect(existingAvatar, existingLogo) })); } catch (e) {}
+    try { if (dirty) localStorage.setItem(DRAFT, JSON.stringify({ slug: $('slug').value, editing: editingSlug, data: collect(existingAvatar, existingLogo, true) })); } catch (e) {}
   }, 800);
 }
 function clearDraft() { clearTimeout(draftTimer); try { localStorage.removeItem(DRAFT); } catch (e) {} }
