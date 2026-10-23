@@ -13,17 +13,15 @@
   "btnStyle": "solid",
   "tilt": false,
   "theme": "dark",
-  "site": "https://tap-mofos.tapbros.workers.dev",
+  "site": "https://rjmarcelino.github.io/tap-mofos",
   "links": [
+    {
+      "label": "MAKE YOURS NOW!",
+      "url": "https://forms.gle/QFCP8yohm6SRekYU8"
+    },
     {
       "label": "Save 09166828617",
       "url": "tel:09166828617"
-    },
-    {
-      "type": "pay",
-      "label": "Pay with Gcash",
-      "provider": "gcash",
-      "qr": "images/rjcam-payqr-1-mvejyjsj.png"
     },
     {
       "type": "pay",
@@ -34,6 +32,12 @@
     {
       "label": "Add me on Facebook",
       "url": "https://www.facebook.com/rjcam031"
+    },
+    {
+      "type": "pay",
+      "label": "Pay with Gcash",
+      "provider": "gcash",
+      "qr": "images/rjcam-payqr-1-mvejyjsj.png"
     },
     {
       "label": "Watch me Stream on Tiktok",
